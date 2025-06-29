@@ -1,0 +1,89 @@
+import torch
+import torch.nn as nn
+import math
+from style_encoder import ResBlock, SinusoidalPositionalEncoding, initialize_weights
+
+# it follows the same structure as the style encoder, but with different parameters e.g. channel list
+# another difference is the use of instance spectral normalization
+# we no longer use CLS token
+class ContentEncoder(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 2,
+        cnn_out_dim: int = 256,
+        transformer_dim: int = 256,
+        num_heads: int = 4,
+        num_layers: int = 4,
+        channels_list: list = [16, 32, 64, 128, 256]
+    ):
+        super().__init__()
+        
+        # CNN with spectral normalization
+        layers = []
+        prev_chan_size = in_channels
+        
+        for idx, chan_size in enumerate(channels_list):
+            # downsample all channels except the last one
+            downsample = idx < len(channels_list) - 1 
+            
+            # append residual block with instance normalization
+            layers.append(ResBlock(prev_chan_size, chan_size, downsample=downsample))
+            layers.append(nn.InstanceNorm2d(chan_size))
+            # layers.append(nn.BatchNorm2d(chan_size))                  con batch norm la varianza di hsic è non nulla -> forse non collassa?
+            prev_chan_size = chan_size
+            
+        # global average pooling to time-frequency dimension
+        layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+        self.cnn = nn.Sequential(*layers)
+        
+        # projection to final cnn embedding dimension
+        self.proj = nn.Linear(prev_chan_size, cnn_out_dim)
+        
+        # Linear projection (CNN out dim -> transformer dim) if needed
+        self.input_proj = (
+            nn.Linear(cnn_out_dim, transformer_dim)
+            if cnn_out_dim != transformer_dim else None
+        )
+        
+        # Positional encoding
+        self.pos_encoder = SinusoidalPositionalEncoding(transformer_dim)
+        
+        # Transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=transformer_dim,
+            nhead=num_heads,
+            dim_feedforward=transformer_dim * 4,
+            dropout=0.1,                                    # change to 0.2 if overfitting
+            batch_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: (B, S, 2, T, F) tensor of STFT+CQT chunks
+        Returns:
+            content_emb: (B, S, transformer_dim) sequence of content embeddings
+        """
+        B, S, C, T, F = x.shape
+        
+        # CNN
+        x = x.view(B * S, C, T, F)                                                      # (B*S, 2, T, F)
+        cnn_features = self.cnn(x)                                                      # (B*S, last_chan_size, 1, 1)
+        cnn_features = cnn_features.view(cnn_features.size(0), -1)                      # (B*S, last_chan_size)
+        
+        # Project to cnn_out_dim if last_chan_size != cnn_out_dim
+        cnn_features = self.proj(cnn_features)                                          # (B*S, cnn_out_dim)
+        seq = cnn_features.view(B, S, -1)                                               # (B, S, cnn_out_dim)
+        
+        # Project to transformer_dim if cnn_out_dim != transformer_dim
+        if self.input_proj:
+            seq = self.input_proj(seq)                                                  # (B, S, transformer_dim)
+        
+        # Positional encoding
+        seq = self.pos_encoder(seq)                                                     # (B, S, transformer_dim)
+        
+        # Transformer encoding
+        content_emb = self.transformer(seq)                                             # (B, S, transformer_dim)
+        
+        return content_emb

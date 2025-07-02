@@ -1,125 +1,188 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.amp import autocast
+import numpy as np
 
-# ---------------------------------------------
-# LightweightDecoder
-# Genera STFT predetti in modo autoregressivo per la predizione audio
-# Input:
-#   - y_prev: [B, S, 2, 287, 513] (STFT precedente, B=batch size, S=4 sequenze)
-#   - class_emb: [256] (embedding di stile)
-#   - content_emb: [B, S, 256] (embedding di contenuto per ogni sequenza)
-#   - hidden: Stato GRU (None o [1, B, 128])
-# Output:
-#   - output: [B, 2, S, 287, 513] (STFT predetto)
-#   - hidden: [1, B, 128] (stato aggiornato della GRU)
-# ---------------------------------------------
-class LightweightDecoder(nn.Module):
-    def __init__(self, d=256, d_hidden=128, num_channels=16, S=4):
+class TransformerDecoder(nn.Module):
+    def __init__(self, d_model=256, nhead=4, num_layers=4, dim_feedforward=1024, S=4, F_prime=8, T_prime=16):
         super().__init__()
-        self.S = S  # Numero di sequenze temporali (default: 4)
-        # Convoluzione iniziale per estrarre feature da STFT
-        self.conv_in = nn.Conv2d(
-            in_channels=2,  # Canali input: reale + immaginario
-            out_channels=num_channels,  # Canali output: 16
-            kernel_size=3, stride=2, padding=1
-        )  # Output: [B, 16, 144, 257]
-        self.ln1 = nn.LayerNorm([num_channels, 144, 257])  # Normalizzazione delle feature
-        self.linear_in = nn.Linear(num_channels * 144 * 257, d)  # Proiezione a d=256
-        # Meccanismo di attenzione per integrare contenuto e stile
-        self.attention = nn.MultiheadAttention(embed_dim=d, num_heads=2, batch_first=True)
-        # GRU per modellare dipendenze temporali tra sequenze
-        self.gru = nn.GRU(input_size=d, hidden_size=d_hidden, num_layers=1, batch_first=True)
-        self.linear_out = nn.Linear(d_hidden, num_channels * 144 * 257)  # Proiezione inversa
-        # Deconvoluzione per ricostruire STFT
-        self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(
-                num_channels, 8, kernel_size=3, stride=2, padding=1, output_padding=0
-            ),  # [B, 8, 287, 513]
+        self.S = S
+        self.d_model = d_model
+        self.F_prime = F_prime
+        self.T_prime = T_prime
+
+        # CNN encoder per estrarre feature da STFT
+        self.conv_encoder = nn.Sequential(
+            nn.Conv2d(2, 16, kernel_size=3, padding=1),                    # [B, 16, 287, 513]
             nn.ReLU(),
-            nn.Conv2d(8, 2, kernel_size=1, stride=1, padding=0)  # [B, 2, 287, 513]
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),         # [B, 32, 144, 257]
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),         # [B, 64, 72, 129]
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),        # [B, 128, 36, 65]
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((F_prime, T_prime))                      # [B, 128, F_prime, T_prime]
         )
-        self.dropout = nn.Dropout(0.1)  # Regolarizzazione
+        self.feature_projection = nn.Linear(128 * F_prime * T_prime, d_model)  # [B, 128*F_prime*T_prime] → [B, d_model]
 
-    def forward(self, y_prev, class_emb, content_emb, hidden=None):
-        batch_size = content_emb.size(0)  # Dimensione del batch
-        outputs = []
-        with autocast('cuda'):  # Usa mixed precision per efficienza su GPU
-            # Processa ogni sequenza s in modo autoregressivo
-            for s in range(self.S):
-                # Estrae feature da STFT della sequenza s
-                x = F.relu(self.ln1(self.conv_in(y_prev[:, s, :, :, :])))  # [B, 16, 144, 257]
-                x = x.view(x.size(0), -1)  # Appiattisce: [B, 16*144*257]
-                x = self.dropout(self.linear_in(x))  # Proiezione: [B, 256]
-                # Combina contenuto e stile con attenzione
-                context = torch.stack(
-                    [content_emb[:, s, :], class_emb.expand(batch_size, -1)], dim=1
-                )  # [B, 2, 256] (contenuto + stile)
-                attn_output, _ = self.attention(x.unsqueeze(1), context, context)  # [B, 1, 256]
-                attn_output = self.dropout(attn_output.squeeze(1))  # [B, 256]
-                # GRU per dipendenze temporali
-                gru_output, hidden = self.gru(attn_output.unsqueeze(1), hidden)  # [B, 1, 128]
-                gru_output = gru_output.squeeze(1)  # [B, 128]
-                # Ricostruisce STFT
-                out = self.linear_out(gru_output)  # [B, 16*144*257]
-                out = out.view(-1, num_channels, 144, 257)  # [B, 16, 144, 257]
-                out = self.deconv(out)  # [B, 2, 287, 513]
-                outputs.append(out.unsqueeze(2))  # [B, 2, 1, 287, 513]
-                y_prev[:, s, :, :, :] = out.detach()  # Aggiorna y_prev per il prossimo passo
-            output = torch.cat(outputs, dim=2)  # [B, 2, 4, 287, 513]
-            # Verifica dimensioni per debug
-            if (y_prev.shape[0] == output.shape[0] and
-                y_prev.shape[1] == output.shape[2] and
-                y_prev.shape[2] == output.shape[1] and
-                y_prev.shape[3] == output.shape[3] and
-                y_prev.shape[4] == output.shape[4]):
-                print("Dimensioni corrette")
-            else:
-                print(f"Problema dimensioni: input {y_prev.shape}, output {output.shape}")
-        return output, hidden  # [B, 2, 4, 287, 513], [1, B, 128]
+        # CNN decoder per generare STFT
+        self.output_projection = nn.Linear(d_model, 128 * F_prime * T_prime)   # [B, d_model] → [B, 128*F_prime*T_prime]
+        self.conv_decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),  # [B, 64, 2*F_prime, 2*T_prime]
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1),   # [B, 32, 4*F_prime, 4*T_prime]
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),   # [B, 16, 8*F_prime, 8*T_prime]
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1),    # [B, 8, 16*F_prime, 16*T_prime]
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1),                      # [B, 4, 32*F_prime, 32*T_prime]
+            nn.ReLU(),
+            nn.ConvTranspose2d(4, 2, kernel_size=4, stride=2, padding=1),                      # [B, 2, 64*F_prime, 64*T_prime]
+            nn.Upsample(size=(287, 513), mode='bilinear', align_corners=False)                 # [B, 2, 287, 513]
+        )
 
-# ---------------------------------------------
-# Funzione di perdita
-# Combina MSE, Magnitude Loss e Spectral Convergence Loss per valutare l'STFT predetto
-# Input: output [B, 2, S, 287, 513], target [B, 2, S, 287, 513]
-# Output: Loss scalare
-# ---------------------------------------------
+        # Proiezione content e class embeddings
+        self.content_proj = nn.Linear(d_model, d_model)
+        self.class_proj = nn.Linear(d_model, d_model)
+
+        # Positional encoding
+        self.pos_emb = nn.Parameter(torch.randn(S, d_model))  # [S, d_model]
+
+        # Transformer decoder
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True
+        )
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+
+    def encode_input(self, x):
+        """
+        x: [B, 2, TIME, FREQ]
+        returns: [B, d_model]
+        """
+        features = self.conv_encoder(x)  # [B, 128, F_prime, T_prime]
+        features = features.flatten(1)   # [B, 128*F_prime*T_prime]
+        return self.feature_projection(features)  # [B, d_model]
+
+    def generate_output(self, decoder_outputs):
+        """
+        decoder_outputs: [B, S, d_model]
+        returns: [B, S, 2, 287, 513]
+        """
+        B, S, D = decoder_outputs.shape
+        out = self.output_projection(decoder_outputs)  # [B, S, 128*F_prime*T_prime]
+        out = out.view(B * S, 128, self.F_prime, self.T_prime)  # [B*S, 128, F_prime, T_prime]
+        out = self.conv_decoder(out)     # [B*S, 2, 287, 513]
+        return out.view(B, S, 2, 287, 513)
+
+    def forward(self, content_emb, class_emb, y=None):
+        B = content_emb.size(0)
+        device = content_emb.device
+
+        memory = torch.cat([self.content_proj(content_emb).unsqueeze(1),
+                            self.class_proj(class_emb).unsqueeze(1)], dim=1)  # [B, 2, d_model]
+
+        if self.training and y is not None:
+            # Teacher forcing
+            y = y.view(B * self.S, 2, 287, 513)
+            y_feat = self.conv_encoder(y)                     # [B*S, 128, F_prime, T_prime]
+            y_feat = y_feat.flatten(1)                        # [B*S, 128*F_prime*T_prime]
+            y_emb = self.feature_projection(y_feat)           # [B*S, d_model]
+            y_emb = y_emb.view(B, self.S, self.d_model)       # [B, S, d_model]
+
+            pos = self.pos_emb.unsqueeze(0).expand(B, -1, -1) # [B, S, d_model]
+            tgt = y_emb + pos                                 # [B, S, d_model]
+
+            out = self.transformer_decoder(tgt=tgt, memory=memory)  # [B, S, d_model]
+        else:
+            # Autoregressive inference
+            generated = []
+            prev = torch.zeros(B, 1, self.d_model, device=device)
+            for t in range(self.S):
+                tgt = prev + self.pos_emb[t].view(1, 1, -1)  # [B, 1, d_model]
+                out = self.transformer_decoder(tgt=tgt, memory=memory)  # [B, 1, d_model]
+                generated.append(out)
+                prev = out
+            out = torch.cat(generated, dim=1)  # [B, S, d_model]
+
+        return self.generate_output(out)  # [B, S, 2, 287, 513]
+
+# Loss
 def compute_loss(output, target, S=4):
-    # MSE: confronta direttamente STFT predetto e target
-    mse_loss = sum(F.mse_loss(output[:, :, s, :, :], target[:, :, s, :, :]) for s in range(S))
-    # Magnitude Loss: confronta magnitudini dello STFT
-    mag_output = torch.sqrt(output[:, 0, :, :, :]**2 + output[:, 1, :, :, :]**2)
-    mag_target = torch.sqrt(target[:, 0, :, :, :]**2 + target[:, 1, :, :, :]**2)
-    mag_loss = sum(F.mse_loss(mag_output[:, s, :, :], mag_target[:, s, :, :]) for s in range(S))
-    # Spectral Convergence Loss: differenza normalizzata delle magnitudini
-    sc_loss = sum(
-        torch.norm(mag_output[:, s, :, :] - mag_target[:, s, :, :], p='fro') /
-        torch.norm(mag_target[:, s, :, :], p='fro') for s in range(S)
-    )
-    # Loss totale: combinazione pesata
-    total_loss = 0.45 * mse_loss + 0.45 * mag_loss + 0.1 * sc_loss
+    """
+    Loss function migliorata con coerenza di fase
+    
+    Args:
+        output: [B, S, 2, 287, 513] - STFT predetto
+        target: [B, S, 2, 287, 513] - STFT target
+        S: numero di sequenze
+    
+    Returns:
+        total_loss: loss scalare
+    """
+    mse_loss = mag_loss = phase_loss = 0
+    
+    # 1. MSE Loss e Magnitude Loss per ogni sequenza
+    for s in range(S):
+        # MSE: confronta direttamente STFT
+        mse_loss += F.mse_loss(output[:, s, :, :, :], target[:, s, :, :, :])
+        
+        # Magnitude Loss: confronta magnitudini
+        mag_output = torch.sqrt(output[:, s, 0, :, :]**2 + output[:, s, 1, :, :]**2)
+        mag_target = torch.sqrt(target[:, s, 0, :, :]**2 + target[:, s, 1, :, :]**2)
+        mag_loss += F.mse_loss(mag_output, mag_target)
+    
+    # 2. Phase Consistency Loss: coerenza di fase tra sequenze consecutive
+    if S > 1:
+        phase_output = torch.atan2(output[:, :, 1, :, :], output[:, :, 0, :, :])  # [B, S, 287, 513]
+        phase_target = torch.atan2(target[:, :, 1, :, :], target[:, :, 0, :, :])
+        
+        for s in range(S-1):
+            # Differenze di fase tra sequenze consecutive
+            phase_diff_out = phase_output[:, s+1] - phase_output[:, s]
+            phase_diff_tgt = phase_target[:, s+1] - phase_target[:, s]
+            
+            # Wrap delle differenze di fase in [-π, π]
+            phase_diff_out = torch.remainder(phase_diff_out + np.pi, 2*np.pi) - np.pi
+            phase_diff_tgt = torch.remainder(phase_diff_tgt + np.pi, 2*np.pi) - np.pi
+            
+            phase_loss += F.mse_loss(phase_diff_out, phase_diff_tgt)
+    
+    # Loss totale con pesi bilanciati
+    total_loss = 0.4 * mse_loss + 0.4 * mag_loss + 0.2 * phase_loss
     return total_loss
-
+    
 if __name__ == "__main__":
-    print(f"CUDA Available: {torch.cuda.is_available()}")
-    print(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    B, S, TIME, FREQ = 4, 4, 287, 513
+    d_model = 256
+    F_prime = 8
+    T_prime = 16
 
-    batch_size = 4
-    d = 256
-    d_hidden = 128
-    num_channels = 16
-    S = 4
+    model = TransformerDecoder(d_model=d_model, S=S, F_prime=F_prime, T_prime=T_prime)
+    model.train()
 
-    decoder = LightweightDecoder(d=d, d_hidden=d_hidden, num_channels=num_channels, S=S).cuda()
-    y_prev = torch.randn(batch_size, S, 2, 287, 513).cuda()
-    class_emb = torch.randn(d).cuda()
-    content_emb = torch.randn(batch_size, S, d).cuda()
-    target = torch.randn(batch_size, 2, S, 287, 513).cuda()
-    hidden = None
+    # Dummy input
+    y_true = torch.randn(B, S, 2, TIME, FREQ)
+    content_emb = torch.randn(B, d_model)
+    class_emb = torch.randn(B, d_model)
 
-    output, hidden = decoder(y_prev, class_emb, content_emb, hidden)
-    print(f"Output shape: {output.shape}")
-    loss = compute_loss(output, target, S=4)
-    print(f"Loss: {loss.item()}")
-    print(f"Memory Allocated: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+    # Teacher forcing
+    y_pred = model(content_emb, class_emb, y_true)
+    print("Output shape (teacher forcing):", y_pred.shape)
+    assert y_pred.shape == (B, S, 2, TIME, FREQ)
+
+    # Eval mode: autoregressivo
+    model.eval()
+    y_autoreg = model(content_emb, class_emb)
+    print("Output shape (autoregressive):", y_autoreg.shape)
+    assert y_autoreg.shape == (B, S, 2, TIME, FREQ)
+
+    # Test loss e parametri
+    loss = compute_loss(y_autoreg, y_true)
+    print(f"Loss: {loss.item():.4f}")
+    print(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
+    if torch.cuda.is_available():
+        print(f"Memory Allocated: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")

@@ -79,11 +79,13 @@ class TransformerDecoder(nn.Module):
         return out.view(B, S, 2, 287, 513)
 
     def forward(self, content_emb, class_emb, y=None):
-        B = content_emb.size(0)
-        device = content_emb.device
-
-        memory = torch.cat([self.content_proj(content_emb).unsqueeze(1),
-                            self.class_proj(class_emb).unsqueeze(1)], dim=1)  # [B, 2, d_model]
+        B, S, D = content_emb.shape
+        
+        content_memory = self.content_proj(content_emb)                                 # (B, S, D)
+        class_memory = self.class_proj(class_emb).unsqueeze(1).expand(-1, S, -1)        # (B, S, D)
+        
+        
+        memory = torch.cat([content_memory, class_memory], dim=1)                       # (B, 2*S, D)
 
         if self.training and y is not None:
             # Teacher forcing

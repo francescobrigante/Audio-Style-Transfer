@@ -73,62 +73,79 @@ class DualInstrumentDataset(Dataset):
         sections_p = get_overlap_windows(conc_p)   # shape: (S, C=2, T, F)
         sections_v = get_overlap_windows(conc_v)
 
-        # Return in format compatible with training pipeline
-        # Randomly choose between piano and violin for this sample
-        if torch.rand(1) < 0.5:
-            return sections_p, 0  # Piano = class 0
-        else:
-            return sections_v, 1  # Violin = class 1
+        # Return both piano and violin sections with their labels
+        # This will be handled by the collate_fn to ensure proper batch structure
+        return {
+            'piano': sections_p,
+            'violin': sections_v,
+            'piano_label': 0,
+            'violin_label': 1
+        }
 
 def collate_fn(batch):
     """
-    Collate function compatible with training pipeline.
-    Expected input format: list of (sections, label) tuples
+    Collate function that ensures the first half of each batch contains piano samples (label 0)
+    and the second half contains violin samples (label 1).
+    
+    Expected input format: list of dictionaries with 'piano', 'violin', 'piano_label', 'violin_label'
     Expected output format: (B, S, 2, T, F), (B,)
     """
-    sections_list = []
-    labels_list = []
+    # Extract piano and violin sections from batch
+    piano_sections_list = []
+    violin_sections_list = []
     
-    for sections, label in batch:
-        sections_list.append(sections)  # sections: (S, 2, T, F)
-        labels_list.append(label)
+    for item in batch:
+        piano_sections_list.append(item['piano'])    # (S, 2, T, F)
+        violin_sections_list.append(item['violin'])  # (S, 2, T, F)
     
-    # Stack sections to create batch dimension
-    # sections_list: [(S1, 2, T, F), (S2, 2, T, F), ...]
-    # We need to handle variable sequence lengths
-    
-    # Find minimum sequence length to ensure all samples have same S
-    min_seq_len = min(sections.shape[0] for sections in sections_list)
+    # Find minimum sequence length for both piano and violin
+    min_seq_len_piano = min(sections.shape[0] for sections in piano_sections_list)
+    min_seq_len_violin = min(sections.shape[0] for sections in violin_sections_list)
+    min_seq_len = min(min_seq_len_piano, min_seq_len_violin)
     
     # Truncate all sequences to minimum length
-    truncated_sections = []
-    for sections in sections_list:
-        if sections.shape[0] >= min_seq_len:
-            truncated_sections.append(sections[:min_seq_len])  # Take first min_seq_len sections
-        else:
-            # This shouldn't happen given our min calculation, but just in case
-            truncated_sections.append(sections)
+    truncated_piano = []
+    truncated_violin = []
     
-    # Stack to create batch
-    X = torch.stack(truncated_sections, dim=0)  # (B, S, 2, T, F)
-    Y = torch.tensor(labels_list)               # (B,)
+    for sections in piano_sections_list:
+        truncated_piano.append(sections[:min_seq_len])
+    
+    for sections in violin_sections_list:
+        truncated_violin.append(sections[:min_seq_len])
+    
+    # Stack to create batch dimensions
+    piano_batch = torch.stack(truncated_piano, dim=0)    # (B, S, 2, T, F)
+    violin_batch = torch.stack(truncated_violin, dim=0)  # (B, S, 2, T, F)
+    
+    # Concatenate piano and violin batches
+    # First half: piano (label 0), Second half: violin (label 1)
+    X = torch.cat([piano_batch, violin_batch], dim=0)    # (2*B, S, 2, T, F)
+    
+    # Create labels: first half = 0 (piano), second half = 1 (violin)
+    batch_size = len(batch)
+    piano_labels = torch.zeros(batch_size, dtype=torch.long)  # (B,) with all 0s
+    violin_labels = torch.ones(batch_size, dtype=torch.long)  # (B,) with all 1s
+    Y = torch.cat([piano_labels, violin_labels], dim=0)       # (2*B,)
     
     return X, Y
 
 # Example usage - update paths for your system
 def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path=None):
     """
-    Create a dataloader compatible with the training pipeline.
+    Create a dataloader that ensures structured batches for robust training.
     
     Args:
         piano_dir: Path to piano audio files
         violin_dir: Path to violin audio files
-        batch_size: Batch size for training
+        batch_size: Batch size for training (actual batch size will be 2*batch_size)
         shuffle: Whether to shuffle the dataset
         stats_path: Path to normalization statistics file
     
     Returns:
-        DataLoader that returns (B, S, 2, T, F), (B,) format
+        DataLoader that returns (2*B, S, 2, T, F), (2*B,) format where:
+        - First half of batch contains piano samples (label 0)
+        - Second half of batch contains violin samples (label 1)
+        - This ensures every batch has both classes for robust adversarial training
     """
     dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
@@ -147,9 +164,11 @@ if __name__ == "__main__":
         # Test a batch
         for batch_idx, (x, labels) in enumerate(dataloader):
             print(f"Batch {batch_idx}:")
-            print(f"  X shape: {x.shape}")  # Should be (B, S, 2, T, F)
-            print(f"  Labels shape: {labels.shape}")  # Should be (B,)
+            print(f"  X shape: {x.shape}")  # Should be (2*B, S, 2, T, F)
+            print(f"  Labels shape: {labels.shape}")  # Should be (2*B,)
             print(f"  Labels: {labels}")
+            print(f"  First half (piano): {labels[:len(labels)//2]}")
+            print(f"  Second half (violin): {labels[len(labels)//2:]}")
             if batch_idx == 0:  # Just test first batch
                 break
     else:

@@ -125,9 +125,9 @@ def load_audio(file_path, sample_rate=22050, cut_time_seconds=10):
     Loads an audio file, resample it to a specified sample rate, and optionally cut it to a specified duration.
     """
     # Load audio file
-    print("Loading audio...")
+    # print("Loading audio...")
     waveform, orig_sample_rate = torchaudio.load(file_path)
-    print(f"Original audio shape: {waveform.shape}, Sample rate: {orig_sample_rate}")
+    # print(f"Original audio shape: {waveform.shape}, Sample rate: {orig_sample_rate}")
     
     if cut_time_seconds is not None:
         cut_samples = int(cut_time_seconds * orig_sample_rate)
@@ -142,7 +142,7 @@ def load_audio(file_path, sample_rate=22050, cut_time_seconds=10):
     if waveform.shape[0] == 2:
         waveform = torch.mean(waveform, dim=0, keepdim=True)                    # (1, samples)
     
-    print(f"Processed audio shape: {waveform.shape}, Sample rate: {sample_rate}")
+    # print(f"Processed audio shape: {waveform.shape}, Sample rate: {sample_rate}")
     
     return waveform, sample_rate
 

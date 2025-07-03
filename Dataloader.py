@@ -14,7 +14,7 @@ def concat_stft_cqt(stft, cqt):
     return torch.cat((stft, cqt), dim=2)
 
 class DualInstrumentDataset(Dataset):
-    def __init__(self, piano_dir, violin_dir):
+    def __init__(self, piano_dir, violin_dir, stats_path=None):
         self.piano_files = sorted([
             os.path.join(piano_dir, f)
             for f in os.listdir(piano_dir)
@@ -27,12 +27,23 @@ class DualInstrumentDataset(Dataset):
         ])
         self.length = min(len(self.piano_files), len(self.violin_files))
 
-        # Loading statistics
-        stats = np.load(r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_stft_cqt.npz")
-        self.stft_mean = torch.tensor(stats["stft_mean"]).float()
-        self.stft_std  = torch.tensor(stats["stft_std"]).float()
-        self.cqt_mean  = torch.tensor(stats["cqt_mean"]).float()
-        self.cqt_std   = torch.tensor(stats["cqt_std"]).float()
+        # Loading statistics - make path configurable
+        if stats_path is None:
+            stats_path = "stats_stft_cqt.npz"  # Default path
+        
+        if os.path.exists(stats_path):
+            stats = np.load(stats_path)
+            self.stft_mean = torch.tensor(stats["stft_mean"]).float()
+            self.stft_std  = torch.tensor(stats["stft_std"]).float()
+            self.cqt_mean  = torch.tensor(stats["cqt_mean"]).float()
+            self.cqt_std   = torch.tensor(stats["cqt_std"]).float()
+        else:
+            print(f"⚠️ Warning: Stats file {stats_path} not found. Using dummy normalization.")
+            # Dummy stats for testing
+            self.stft_mean = torch.zeros(2, 513)
+            self.stft_std  = torch.ones(2, 513)
+            self.cqt_mean  = torch.zeros(2, 84)
+            self.cqt_std   = torch.ones(2, 84)
 
     def __len__(self):
         return self.length
@@ -62,34 +73,109 @@ class DualInstrumentDataset(Dataset):
         sections_p = get_overlap_windows(conc_p)   # shape: (S, C=2, T, F)
         sections_v = get_overlap_windows(conc_v)
 
-        return sections_p, 0, sections_v, 1
+        # Return in format compatible with training pipeline
+        # Randomly choose between piano and violin for this sample
+        if torch.rand(1) < 0.5:
+            return sections_p, 0  # Piano = class 0
+        else:
+            return sections_v, 1  # Violin = class 1
 
 def collate_fn(batch):
-    piano_tensors, violin_tensors = [], []
-    labels = []
-
-    for piano_tensor, piano_label, violin_tensor, violin_label in batch:
-        piano_tensors.append(piano_tensor)
-        violin_tensors.append(violin_tensor)
-
-        labels += [piano_label] * piano_tensor.shape[0]
-        labels += [violin_label] * violin_tensor.shape[0]
-
-    X = torch.cat(piano_tensors + violin_tensors, dim=0)  
-    Y = torch.tensor(labels)                              
+    """
+    Collate function compatible with training pipeline.
+    Expected input format: list of (sections, label) tuples
+    Expected output format: (B, S, 2, T, F), (B,)
+    """
+    sections_list = []
+    labels_list = []
+    
+    for sections, label in batch:
+        sections_list.append(sections)  # sections: (S, 2, T, F)
+        labels_list.append(label)
+    
+    # Stack sections to create batch dimension
+    # sections_list: [(S1, 2, T, F), (S2, 2, T, F), ...]
+    # We need to handle variable sequence lengths
+    
+    # Find minimum sequence length to ensure all samples have same S
+    min_seq_len = min(sections.shape[0] for sections in sections_list)
+    
+    # Truncate all sequences to minimum length
+    truncated_sections = []
+    for sections in sections_list:
+        if sections.shape[0] >= min_seq_len:
+            truncated_sections.append(sections[:min_seq_len])  # Take first min_seq_len sections
+        else:
+            # This shouldn't happen given our min calculation, but just in case
+            truncated_sections.append(sections)
+    
+    # Stack to create batch
+    X = torch.stack(truncated_sections, dim=0)  # (B, S, 2, T, F)
+    Y = torch.tensor(labels_list)               # (B,)
+    
     return X, Y
 
-dataset = DualInstrumentDataset(
-    piano_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\PianoMotion10M_ready",
-    violin_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\Bach+ViolinEtudes_44khz"
-    )
+# Example usage - update paths for your system
+def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path=None):
+    """
+    Create a dataloader compatible with the training pipeline.
+    
+    Args:
+        piano_dir: Path to piano audio files
+        violin_dir: Path to violin audio files
+        batch_size: Batch size for training
+        shuffle: Whether to shuffle the dataset
+        stats_path: Path to normalization statistics file
+    
+    Returns:
+        DataLoader that returns (B, S, 2, T, F), (B,) format
+    """
+    dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
 
-dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
+# Example paths - update these for your system
+if __name__ == "__main__":
+    # Test paths - update these!
+    piano_dir = r"dataset/piano"  # Update this path
+    violin_dir = r"dataset/violin"  # Update this path
+    
+    # Only run if directories exist
+    if os.path.exists(piano_dir) and os.path.exists(violin_dir):
+        dataset = DualInstrumentDataset(piano_dir, violin_dir)
+        dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
+        
+        # Test a batch
+        for batch_idx, (x, labels) in enumerate(dataloader):
+            print(f"Batch {batch_idx}:")
+            print(f"  X shape: {x.shape}")  # Should be (B, S, 2, T, F)
+            print(f"  Labels shape: {labels.shape}")  # Should be (B,)
+            print(f"  Labels: {labels}")
+            if batch_idx == 0:  # Just test first batch
+                break
+    else:
+        print("⚠️ Dataset directories not found. Update paths in the script.")
+
+# Legacy code for compatibility
+# dataset = DualInstrumentDataset(
+#     piano_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\PianoMotion10M_ready",
+#     violin_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\Bach+ViolinEtudes_44khz"
+# )
+# dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
 
 
 def diagnose_window_counts(piano_dir, violin_dir, max_files=10):
+    """
+    Diagnose window counts for debugging.
+    Update paths as needed for your system.
+    """
     print("🧠 Diagnostica delle finestre generate da STFT + CQT")
     print("-" * 80)
+    
+    if not os.path.exists(piano_dir) or not os.path.exists(violin_dir):
+        print(f"⚠️ Warning: Directories not found:")
+        print(f"  Piano: {piano_dir}")
+        print(f"  Violin: {violin_dir}")
+        return
 
     piano_files = sorted([
         os.path.join(piano_dir, f)
@@ -119,10 +205,3 @@ def diagnose_window_counts(piano_dir, violin_dir, max_files=10):
         print(f"🎻 Violin: {os.path.basename(v_path):<35} | Duration: {duration_v:.2f}s | T: {tensor_v.shape[1]} | Windows: {windows_v.shape[0]}")
         
         print("-" * 80)
-
-diagnose_window_counts(
-    piano_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\PianoMotion10M_ready",
-    violin_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\Bach+ViolinEtudes_44khz",
-    max_files=5
-)
-

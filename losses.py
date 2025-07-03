@@ -103,7 +103,6 @@ def adversarial_loss(
     
     if class_pred is not None:
         # assumes the correct class labels are 0 and 1 for the two classes IN THIS ORDER <----
-        # SO MAKE DATALOADER RETURN THEM IN THIS ORDER AND STYLE ENCODER TOO
         class_labels = torch.tensor([0, 1], device=device) 
         class_loss = nn.CrossEntropyLoss()(class_pred, class_labels)
         discriminator_loss += lambda_class * class_loss
@@ -179,8 +178,8 @@ def disentanglement_loss(style_emb: torch.Tensor, content_emb: torch.Tensor, use
         K = rbf(S)
         L = rbf(C)
         
-        print(f"Norm of K: {torch.norm(K).item():.4f}")
-        print(f"Norm of L: {torch.norm(L).item():.4f}")
+        # print(f"Norm of K: {torch.norm(K).item():.4f}")
+        # print(f"Norm of L: {torch.norm(L).item():.4f}")
         
         KH = K @ H
         LH = L @ H

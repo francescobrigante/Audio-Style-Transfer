@@ -149,8 +149,8 @@ def disentanglement_loss(style_emb: torch.Tensor, content_emb: torch.Tensor, use
     
         
     # Debug: print norms
-    print(f"Norm of S: {torch.norm(S).item():.4f}")
-    print(f"Norm of C: {torch.norm(C).item():.4f}")
+    # print(f"Norm of S: {torch.norm(S).item():.4f}")
+    # print(f"Norm of C: {torch.norm(C).item():.4f}")
 
     # Cross-covariance penalty
     if not use_hsic:

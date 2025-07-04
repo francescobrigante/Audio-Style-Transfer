@@ -14,7 +14,7 @@ def concat_stft_cqt(stft, cqt):
     return torch.cat((stft, cqt), dim=2)
 
 class DualInstrumentDataset(Dataset):
-    def __init__(self, piano_dir, violin_dir, stats_path=None):
+    def __init__(self, piano_dir, violin_dir, stats_path=None, use_separate_stats=True):
         self.piano_files = sorted([
             os.path.join(piano_dir, f)
             for f in os.listdir(piano_dir)
@@ -26,24 +26,73 @@ class DualInstrumentDataset(Dataset):
             if f.endswith(".mp3") or f.endswith(".wav")
         ])
         self.length = min(len(self.piano_files), len(self.violin_files))
+        self.use_separate_stats = use_separate_stats
 
-        # Loading statistics - make path configurable
+        # Loading statistics
+        if use_separate_stats:
+            self._load_separate_stats()
+        else:
+            self._load_combined_stats(stats_path)
+
+    def _load_separate_stats(self):
+        """Load separate statistics for piano and violin"""
+        piano_stats_path = "stats_stft_cqt_piano.npz"
+        violin_stats_path = "stats_stft_cqt_violino.npz"
+        
+        if os.path.exists(piano_stats_path) and os.path.exists(violin_stats_path):
+            # Load piano statistics
+            piano_stats = np.load(piano_stats_path)
+            self.stft_mean_piano = torch.tensor(piano_stats["stft_mean"]).float()
+            self.stft_std_piano = torch.tensor(piano_stats["stft_std"]).float()
+            self.cqt_mean_piano = torch.tensor(piano_stats["cqt_mean"]).float()
+            self.cqt_std_piano = torch.tensor(piano_stats["cqt_std"]).float()
+            
+            # Load violin statistics
+            violin_stats = np.load(violin_stats_path)
+            self.stft_mean_violin = torch.tensor(violin_stats["stft_mean"]).float()
+            self.stft_std_violin = torch.tensor(violin_stats["stft_std"]).float()
+            self.cqt_mean_violin = torch.tensor(violin_stats["cqt_mean"]).float()
+            self.cqt_std_violin = torch.tensor(violin_stats["cqt_std"]).float()
+            
+            print(f"✅ Loaded separate statistics:")
+            print(f"  Piano: {piano_stats_path}")
+            print(f"  Violin: {violin_stats_path}")
+        else:
+            print(f"⚠️ Warning: Separate stats files not found. Using dummy normalization.")
+            print(f"  Expected: {piano_stats_path}, {violin_stats_path}")
+            self._create_dummy_separate_stats()
+
+    def _load_combined_stats(self, stats_path):
+        """Load combined statistics (fallback to original behavior)"""
         if stats_path is None:
-            stats_path = "stats_stft_cqt.npz"  # Default path
+            stats_path = "stats_unified_stft_cqt.npz"
         
         if os.path.exists(stats_path):
             stats = np.load(stats_path)
-            self.stft_mean = torch.tensor(stats["stft_mean"]).float()
-            self.stft_std  = torch.tensor(stats["stft_std"]).float()
-            self.cqt_mean  = torch.tensor(stats["cqt_mean"]).float()
-            self.cqt_std   = torch.tensor(stats["cqt_std"]).float()
+            # Use same stats for both instruments
+            self.stft_mean_piano = self.stft_mean_violin = torch.tensor(stats["stft_mean"]).float()
+            self.stft_std_piano = self.stft_std_violin = torch.tensor(stats["stft_std"]).float()
+            self.cqt_mean_piano = self.cqt_mean_violin = torch.tensor(stats["cqt_mean"]).float()
+            self.cqt_std_piano = self.cqt_std_violin = torch.tensor(stats["cqt_std"]).float()
+            
+            print(f"✅ Loaded combined statistics from: {stats_path}")
         else:
-            print(f"Warning: Stats file {stats_path} not found. Using dummy normalization.")
-            # Dummy stats for testing
-            self.stft_mean = torch.zeros(2, 513)
-            self.stft_std  = torch.ones(2, 513)
-            self.cqt_mean  = torch.zeros(2, 84)
-            self.cqt_std   = torch.ones(2, 84)
+            print(f"⚠️ Warning: Combined stats file {stats_path} not found. Using dummy normalization.")
+            self._create_dummy_separate_stats()
+
+    def _create_dummy_separate_stats(self):
+        """Create dummy statistics for testing"""
+        # Dummy stats for piano
+        self.stft_mean_piano = torch.zeros(2, 513)
+        self.stft_std_piano = torch.ones(2, 513)
+        self.cqt_mean_piano = torch.zeros(2, 84)
+        self.cqt_std_piano = torch.ones(2, 84)
+        
+        # Dummy stats for violin
+        self.stft_mean_violin = torch.zeros(2, 513)
+        self.stft_std_violin = torch.ones(2, 513)
+        self.cqt_mean_violin = torch.zeros(2, 84)
+        self.cqt_std_violin = torch.ones(2, 84)
 
     def __len__(self):
         return self.length
@@ -61,11 +110,11 @@ class DualInstrumentDataset(Dataset):
         stft_v = get_STFT(audio_v)
         cqt_v = get_CQT(audio_v)
 
-        # Normalize each (by channel and frequency bin)
-        stft_p = normalize(stft_p, self.stft_mean, self.stft_std)
-        cqt_p = normalize(cqt_p, self.cqt_mean, self.cqt_std)
-        stft_v = normalize(stft_v, self.stft_mean, self.stft_std)
-        cqt_v = normalize(cqt_v, self.cqt_mean, self.cqt_std)
+        # Normalize using separate statistics
+        stft_p = normalize(stft_p, self.stft_mean_piano, self.stft_std_piano)
+        cqt_p = normalize(cqt_p, self.cqt_mean_piano, self.cqt_std_piano)
+        stft_v = normalize(stft_v, self.stft_mean_violin, self.stft_std_violin)
+        cqt_v = normalize(cqt_v, self.cqt_mean_violin, self.cqt_std_violin)
 
         # Concatenation + Windowing
         conc_p = concat_stft_cqt(stft_p, cqt_p)    # shape: (2, T, F_new)
@@ -126,7 +175,7 @@ def collate_fn(batch):
     return result_tensor, labels
 
 # Example usage - update paths for your system
-def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path=None):
+def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path=None, use_separate_stats=True):
     """
     Create a dataloader that returns balanced batches with equal piano/violin samples.
     
@@ -135,7 +184,8 @@ def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path
         violin_dir: Path to violin audio files
         batch_size: Total batch size (must be even number for balanced batches)
         shuffle: Whether to shuffle the dataset
-        stats_path: Path to normalization statistics file
+        stats_path: Path to normalization statistics file (used only if use_separate_stats=False)
+        use_separate_stats: Whether to use separate statistics for piano and violin
     
     Returns:
         DataLoader that returns (B, S, 2, T, F), (B,) format where:
@@ -151,11 +201,8 @@ def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path
         print(f"Warning: batch_size={batch_size} is odd. Rounding down to {batch_size-1} for balanced batches.")
         batch_size = batch_size - 1
     
-    dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path)
+    dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path, use_separate_stats)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
-
-
-
 
 def diagnose_window_counts(piano_dir, violin_dir, max_files=10):
     """
@@ -199,3 +246,22 @@ def diagnose_window_counts(piano_dir, violin_dir, max_files=10):
         print(f"🎻 Violin: {os.path.basename(v_path):<35} | Duration: {duration_v:.2f}s | T: {tensor_v.shape[1]} | Windows: {windows_v.shape[0]}")
         
         print("-" * 80)
+
+# Example usage with separate statistics (recommended)
+if __name__ == "__main__":
+    # Using separate statistics (default behavior)
+    dataloader = get_dataloader(
+        piano_dir="dataset/train",
+        violin_dir="C:/Users/Lucia/Desktop/Uni/DL/Dataset/DATASET_partitioned/test/Bach+ViolinEtudes_44khz",
+        batch_size=8,
+        use_separate_stats=True
+    )
+    
+    # Alternative: using combined statistics
+    # dataloader = get_dataloader(
+    #     piano_dir="dataset/train",
+    #     violin_dir="C:/Users/Lucia/Desktop/Uni/DL/Dataset/DATASET_partitioned/test/Bach+ViolinEtudes_44khz",
+    #     batch_size=8,
+    #     use_separate_stats=False,
+    #     stats_path="stats_stft_cqt.npz"
+    # )

@@ -28,8 +28,8 @@ class DualInstrumentDataset(Dataset):
         self.length = min(len(self.piano_files), len(self.violin_files))
 
         # Caricamento statistiche separate
-        piano_stats = np.load(r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_stft_cqt_piano.npz")
-        violin_stats = np.load(r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_stft_cqt_violino.npz")
+        piano_stats = np.load(r"stats_stft_cqt_piano.npz")
+        violin_stats = np.load(r"stats_stft_cqt_violino.npz")
 
         self.stft_mean_piano = torch.tensor(piano_stats["stft_mean"]).float()
         self.stft_std_piano  = torch.tensor(piano_stats["stft_std"]).float()
@@ -88,7 +88,7 @@ def collate_fn(batch):
     return X, Y
 
 dataset = DualInstrumentDataset(
-    piano_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\PianoMotion10M_ready",
+    piano_dir=r"dataset/train",
     violin_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\Bach+ViolinEtudes_44khz"
     )
 

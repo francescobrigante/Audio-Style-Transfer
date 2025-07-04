@@ -38,7 +38,7 @@ class DualInstrumentDataset(Dataset):
             self.cqt_mean  = torch.tensor(stats["cqt_mean"]).float()
             self.cqt_std   = torch.tensor(stats["cqt_std"]).float()
         else:
-            print(f"⚠️ Warning: Stats file {stats_path} not found. Using dummy normalization.")
+            print(f"Warning: Stats file {stats_path} not found. Using dummy normalization.")
             # Dummy stats for testing
             self.stft_mean = torch.zeros(2, 513)
             self.stft_std  = torch.ones(2, 513)
@@ -84,102 +84,77 @@ class DualInstrumentDataset(Dataset):
 
 def collate_fn(batch):
     """
-    Collate function that ensures the first half of each batch contains piano samples (label 0)
-    and the second half contains violin samples (label 1).
+    Efficient collate function that creates balanced batches with equal piano/violin samples.
     
     Expected input format: list of dictionaries with 'piano', 'violin', 'piano_label', 'violin_label'
-    Expected output format: (B, S, 2, T, F), (B,)
+    Expected output format: (B, S, 2, T, F), (B,) where B = len(batch)
+    
     """
-    # Extract piano and violin sections from batch
-    piano_sections_list = []
-    violin_sections_list = []
-    
-    for item in batch:
-        piano_sections_list.append(item['piano'])    # (S, 2, T, F)
-        violin_sections_list.append(item['violin'])  # (S, 2, T, F)
-    
-    # Find minimum sequence length for both piano and violin
-    min_seq_len_piano = min(sections.shape[0] for sections in piano_sections_list)
-    min_seq_len_violin = min(sections.shape[0] for sections in violin_sections_list)
-    min_seq_len = min(min_seq_len_piano, min_seq_len_violin)
-    
-    # Truncate all sequences to minimum length
-    truncated_piano = []
-    truncated_violin = []
-    
-    for sections in piano_sections_list:
-        truncated_piano.append(sections[:min_seq_len])
-    
-    for sections in violin_sections_list:
-        truncated_violin.append(sections[:min_seq_len])
-    
-    # Stack to create batch dimensions
-    piano_batch = torch.stack(truncated_piano, dim=0)    # (B, S, 2, T, F)
-    violin_batch = torch.stack(truncated_violin, dim=0)  # (B, S, 2, T, F)
-    
-    # Concatenate piano and violin batches
-    # First half: piano (label 0), Second half: violin (label 1)
-    X = torch.cat([piano_batch, violin_batch], dim=0)    # (2*B, S, 2, T, F)
-    
-    # Create labels: first half = 0 (piano), second half = 1 (violin)
     batch_size = len(batch)
-    piano_labels = torch.zeros(batch_size, dtype=torch.long)  # (B,) with all 0s
-    violin_labels = torch.ones(batch_size, dtype=torch.long)  # (B,) with all 1s
-    Y = torch.cat([piano_labels, violin_labels], dim=0)       # (2*B,)
+    half_batch = batch_size // 2
     
-    return X, Y
+    # Extract sections efficiently
+    piano_sections = [batch[i]['piano'] for i in range(half_batch)]
+    violin_sections = [batch[i]['violin'] for i in range(half_batch)]
+    
+    # Find minimum sequence length in one pass
+    all_sections = piano_sections + violin_sections
+    min_seq_len = min(sections.shape[0] for sections in all_sections)
+    
+    # Pre-allocate the final tensor for better memory efficiency
+    # Get dimensions from first sample
+    sample_shape = piano_sections[0].shape  # (S, 2, T, F)
+    _, channels, time_steps, freq_bins = sample_shape
+    
+    # Create output tensor
+    result_tensor = torch.empty((batch_size, min_seq_len, channels, time_steps, freq_bins), 
+                               dtype=piano_sections[0].dtype)
+    
+    # Fill tensor 
+    for i in range(half_batch):
+        # Piano samples (first half)
+        result_tensor[i] = piano_sections[i][:min_seq_len]
+        # Violin samples (second half)
+        result_tensor[i + half_batch] = violin_sections[i][:min_seq_len]
+    
+    # Create labels tensor directly - more efficient than list + conversion
+    labels = torch.cat([
+        torch.zeros(half_batch, dtype=torch.long),  # Piano labels
+        torch.ones(half_batch, dtype=torch.long)    # Violin labels
+    ])
+    
+    return result_tensor, labels
 
 # Example usage - update paths for your system
 def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path=None):
     """
-    Create a dataloader that ensures structured batches for robust training.
+    Create a dataloader that returns balanced batches with equal piano/violin samples.
     
     Args:
         piano_dir: Path to piano audio files
         violin_dir: Path to violin audio files
-        batch_size: Batch size for training (actual batch size will be 2*batch_size)
+        batch_size: Total batch size (must be even number for balanced batches)
         shuffle: Whether to shuffle the dataset
         stats_path: Path to normalization statistics file
     
     Returns:
-        DataLoader that returns (2*B, S, 2, T, F), (2*B,) format where:
+        DataLoader that returns (B, S, 2, T, F), (B,) format where:
+        - B = batch_size (actual requested batch size)
         - First half of batch contains piano samples (label 0)
         - Second half of batch contains violin samples (label 1)
-        - This ensures every batch has both classes for robust adversarial training
+        - Example: batch_size=8 → 4 piano + 4 violin samples
+    
+    Note:
+        batch_size should be even to ensure balanced piano/violin distribution
     """
+    if batch_size % 2 != 0:
+        print(f"Warning: batch_size={batch_size} is odd. Rounding down to {batch_size-1} for balanced batches.")
+        batch_size = batch_size - 1
+    
     dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
 
-# Example paths - update these for your system
-if __name__ == "__main__":
-    # Test paths - update these!
-    piano_dir = r"dataset/piano"  # Update this path
-    violin_dir = r"dataset/violin"  # Update this path
-    
-    # Only run if directories exist
-    if os.path.exists(piano_dir) and os.path.exists(violin_dir):
-        dataset = DualInstrumentDataset(piano_dir, violin_dir)
-        dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
-        
-        # Test a batch
-        for batch_idx, (x, labels) in enumerate(dataloader):
-            print(f"Batch {batch_idx}:")
-            print(f"  X shape: {x.shape}")  # Should be (2*B, S, 2, T, F)
-            print(f"  Labels shape: {labels.shape}")  # Should be (2*B,)
-            print(f"  Labels: {labels}")
-            print(f"  First half (piano): {labels[:len(labels)//2]}")
-            print(f"  Second half (violin): {labels[len(labels)//2:]}")
-            if batch_idx == 0:  # Just test first batch
-                break
-    else:
-        print("⚠️ Dataset directories not found. Update paths in the script.")
 
-# Legacy code for compatibility
-# dataset = DualInstrumentDataset(
-#     piano_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\PianoMotion10M_ready",
-#     violin_dir=r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\test\Bach+ViolinEtudes_44khz"
-# )
-# dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
 
 
 def diagnose_window_counts(piano_dir, violin_dir, max_files=10):

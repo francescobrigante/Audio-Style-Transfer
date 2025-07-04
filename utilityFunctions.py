@@ -71,11 +71,11 @@ def get_CQT(waveform, sample_rate=22050, n_bins=84, hop_length=256):
 
 def inverse_STFT(stft_tensor, n_fft=1024, hop_length=256):
     """
-    Input: torch.Tensor (frames, freq, 2) where 2 is [real, imaginary]
+    Input: torch.Tensor (2, time, freq) where 2 is [real, imaginary]
     
     Output: torch.Tensor (samples,) - reconstructed waveform
     """
-    stft_tensor = stft_tensor.transpose(stft_tensor, (0, 2, 1))  # (2, freq, frames)
+    stft_tensor = stft_tensor.permute(0, 2, 1)  # (2, freq, time)
     
     real_part = stft_tensor[0, :, :]  # (freq, frames)
     imag_part = stft_tensor[1, :, :]  # (freq, frames)

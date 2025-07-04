@@ -37,7 +37,7 @@ class DualInstrumentDataset(Dataset):
     def _load_separate_stats(self):
         """Load separate statistics for piano and violin"""
         piano_stats_path = "stats_stft_cqt_piano.npz"
-        violin_stats_path = "stats_stft_cqt_violino.npz"
+        violin_stats_path = "stats_stft_cqt_violin.npz"
         
         if os.path.exists(piano_stats_path) and os.path.exists(violin_stats_path):
             # Load piano statistics

@@ -54,12 +54,6 @@ Thumbs.db
 # *.m4a
 # *.ogg
 
-# Large files and outputs
-*.npy
-*.npz
-outputs/
-results/
-
 # Experiment tracking
 wandb/
 mlruns/

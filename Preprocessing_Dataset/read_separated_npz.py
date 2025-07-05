@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Input directories
-path_piano = r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_stft_cqt_piano.npz"
-path_violin = r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_stft_cqt_violino.npz"
+path_piano = r"..\train_set_stats\stats_stft_cqt_piano.npz"
+path_violin = r"..\train_set_stats\stats_stft_cqt_violino.npz"
 
 stats_piano = np.load(path_piano)
 stats_violin = np.load(path_violin)

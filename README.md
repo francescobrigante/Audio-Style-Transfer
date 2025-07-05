@@ -1,6 +1,6 @@
 # Disentangled Latent Representations for Audio Style Transfer
 
-Neural Audio StyleTtransfer between piano and violin using GAN-based Encoder-Decoder architecture based on Disentanglement of Latent Representations of the input in complex domain.
+Neural Audio Style Transfer between piano and violin using GAN-based Encoder-Decoder architecture based on Disentanglement of Latent Representations of the input in complex domain.
 
 ## Overview
 

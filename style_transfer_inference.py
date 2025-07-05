@@ -17,7 +17,7 @@ from google.colab import drive
 
 ### Sostituire nomi con quelli dei file corretti
 from content_encoder import ContentEncoder
-from decoder import Decoder
+from new_decoder import Decoder
 from utilityFunctions import get_STFT, get_CQT, inverse_STFT, get_overlap_windows, sections2spectrogram, concat_stft_cqt
 
 # Monta Google Drive

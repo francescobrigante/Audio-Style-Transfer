@@ -5,8 +5,8 @@ from tqdm import tqdm
 from utilityFunctions import load_audio, get_STFT, get_CQT
 
 # Configuration
-dataset_dir = r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET_partitioned\train"  # cartella con solo il TRAIN SET
-output_path = r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader"
+dataset_dir = r"..\dataset\train"  # Folder with only the train set
+output_path = r"..\train_set_stats"
 
 # Initialization
 sum_all = None
@@ -22,7 +22,7 @@ for root, _, filenames in os.walk(dataset_dir):
 def concat_stft_cqt(stft, cqt):
     return torch.cat((stft, cqt), dim=2)
 
-for fname in tqdm(files, desc="↻ Calcolo STFT+CQT stats"):
+for fname in tqdm(files, desc="Compute STFT+CQT stats"):
     path = os.path.join(dataset_dir, fname)
     try:
         audio, _ = load_audio(path)
@@ -30,7 +30,7 @@ for fname in tqdm(files, desc="↻ Calcolo STFT+CQT stats"):
         cqt = get_CQT(audio)    # shape: (2, T, F2)
         merged = concat_stft_cqt(stft, cqt)  # shape: (2, T, F_total)
 
-        # Media e varianza lungo T → resta (2, F)
+        # Mean and variance along T→ stay (2, F)
         mean_clip = merged.mean(dim=1)  # (2, F)
         std_clip = merged.std(dim=1)    # (2, F)
 

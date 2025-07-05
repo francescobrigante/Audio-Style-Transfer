@@ -122,7 +122,7 @@ class Decoder(nn.Module):
         for name, param in self.named_parameters():
             if 'weight' in name:
                 if param.dim() > 1:
-                    nn.init.xavier_uniform_(param)
+                    nn.init.xavier_uniform_(param, gain=0.2)
                 else:
                     nn.init.zeros_(param)
             elif 'bias' in name:
@@ -234,7 +234,6 @@ class Decoder(nn.Module):
         y_embeddings = self.encode_input(y_flat)    # [B*S_target, d_model]
         y_emb_seq = y_embeddings.view(B_y, S_y, self.d_model)  # [B, S_target, d_model]
         
-        y_emb_seq = torch.stack(y_embeddings, dim=1)  # [B, S_y, d_model]
         
         # Aggiungi positional encoding
         y_emb_seq = self.pos_encoding(y_emb_seq)

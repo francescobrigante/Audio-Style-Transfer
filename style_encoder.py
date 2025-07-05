@@ -249,7 +249,9 @@ class StyleEncoder(nn.Module):
             
         return style_emb, class_emb
     
-    
+
+# initialization that was originally used
+# however it was constantly causing grad explosion so I switched to a more conservative one 
 def initialize_weights(model):
     """
     Initializes weights of the model according to the following scheme:
@@ -278,16 +280,16 @@ def initialize_weights(model):
             
         elif isinstance(module, nn.Linear):
             # xavier
-            nn.init.xavier_normal_(module.weight)
+            nn.init.xavier_normal_(module.weight, gain=0.2)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
                 
         elif isinstance(module, nn.TransformerEncoderLayer):
             # xavier
-            nn.init.xavier_normal_(module.self_attn.in_proj_weight)
-            nn.init.xavier_normal_(module.self_attn.out_proj.weight)
-            nn.init.xavier_normal_(module.linear1.weight)
-            nn.init.xavier_normal_(module.linear2.weight)
+            nn.init.xavier_normal_(module.self_attn.in_proj_weight, gain=0.2)
+            nn.init.xavier_normal_(module.self_attn.out_proj.weight, gain=0.2)
+            nn.init.xavier_normal_(module.linear1.weight, gain=0.2)
+            nn.init.xavier_normal_(module.linear2.weight, gain=0.2)
             nn.init.constant_(module.self_attn.in_proj_bias, 0)
             nn.init.constant_(module.self_attn.out_proj.bias, 0)
             nn.init.constant_(module.linear1.bias, 0)

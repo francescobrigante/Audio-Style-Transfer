@@ -3,6 +3,8 @@ import librosa
 import numpy as np
 from tqdm import tqdm
 
+# Input directories
+# Dataset united, not the one partitioned one (train, test and validation)
 dataset2 = r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\DATASET\Bach+ViolinEtudes_44khz" #delete row in case you want to analyze a dataset only
 dataset1 = r"C:\Users\Lucia\Desktop\Uni\DL\Dataset\PianoMotion10M_ready"
 

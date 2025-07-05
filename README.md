@@ -8,7 +8,7 @@ This project implements a deep learning system that can transfer the style chara
 
 ## Key Features
 
--**Operating in the full complex domain**: Many musical models discard phase information, which is essential for a better reconstruction
+- **Operating in the full complex domain**: Many musical models discard phase information, which is essential for a better reconstruction
 - **Different encoders for different roles**: Definition of content and style encoder and relative constraints and losses to enforce this
 - **Transformer-based Architecture**: Uses self-attention mechanisms for temporal modeling
 - **Multi-scale Losses**: Combines time-domain, frequency-domain, and perceptual losses (reconstruction, contrastive, adversarial, disentanglement)

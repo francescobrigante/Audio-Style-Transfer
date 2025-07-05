@@ -1,6 +1,6 @@
 import numpy as np
 
-data = np.load(r"C:\Users\Lucia\Desktop\Uni\DL\Dataloader\stats_unified_stft_cqt.npz")
+data = np.load(r"..\train_set_stats\stats_unified_stft_cqt.npz")
 
 print("Chiavi presenti nel file:", data.files)
 

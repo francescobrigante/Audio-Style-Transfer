@@ -228,14 +228,11 @@ class Decoder(nn.Module):
         B_y, S_y, C_y, H_y, W_y = y.shape
         device = y.device
         
-        # Codifica la sequenza target
-        y_flat = y.view(B_y * S_y, C_y, H_y, W_y)  # [B*S, 2, 287, 513]
-        
+        # Codifica la sequenza target        
         # Estrai embeddings per ogni frame in modo più efficiente
-        y_embeddings = []
-        for i in range(S_y):
-            frame_emb = self.encode_input(y_flat[i*B_y:(i+1)*B_y])  # [B, d_model]
-            y_embeddings.append(frame_emb)
+        y_flat = y.view(B_y * S_y, C_y, H_y, W_y)  # [B*S_target, 2, 287, 513]
+        y_embeddings = self.encode_input(y_flat)    # [B*S_target, d_model]
+        y_emb_seq = y_embeddings.view(B_y, S_y, self.d_model)  # [B, S_target, d_model]
         
         y_emb_seq = torch.stack(y_embeddings, dim=1)  # [B, S_y, d_model]
         

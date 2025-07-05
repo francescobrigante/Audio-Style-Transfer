@@ -32,40 +32,40 @@ Audio-Style-Transfer/
 ├── README.md
 │
 ├── Core Models/
-│   ├── style_encoder.py          # Style encoder with CNN + Transformer
-│   ├── content_encoder.py        # Content encoder for musical structure
-│   ├── new_decoder.py           # Dynamic autoregressive decoder
-│   └── discriminator.py         # Adversarial discriminator
+│   ├── style_encoder.py                            # Style encoder with CNN + Transformer
+│   ├── content_encoder.py                          # Content encoder for musical structure
+│   ├── new_decoder.py                              # Dynamic autoregressive decoder
+│   └── discriminator.py                            # Adversarial discriminator
 │
 ├── Training & Loss Functions/
-│   ├── losses.py                # InfoNCE, margin, adversarial, HSIC losses
-│   ├── dataloader.py           # Efficient dual-instrument data loading
-│   ├── train.ipynb            # Basic training notebook
-│   └── train2.ipynb           # Advanced training with curriculum learning
+│   ├── losses.py                                   # InfoNCE, margin, adversarial, HSIC losses
+│   ├── dataloader.py                               # Efficient dual-instrument data loading
+│   ├── train.ipynb                                 # Basic training notebook
+│   └── train2.ipynb                                # Advanced training with curriculum learning
 │
 ├── Utilities & Testing/
-│   ├── utilityFunctions.py     # STFT/CQT processing, audio I/O
-│   ├── test_correctness.ipynb  # Model validation and testing
-│   └── style_transfer_inference.py  # Inference script for style transfer
+│   ├── utilityFunctions.py                         # STFT/CQT processing, audio I/O
+│   ├── test_correctness.ipynb                      # Model validation and testing
+│   └── style_transfer_inference.py                 # Inference script for style transfer
 │
 ├── Dataset Statistics/
 │   └── train_set_stats/
-│       ├── stats_stft_cqt_piano.npz    # Piano normalization statistics
-│       ├── stats_stft_cqt_violin.npz   # Violin normalization statistics
-│       └── stats_unified_stft_cqt.npz  # Combined statistics
+│       ├── stats_stft_cqt_piano.npz                # Piano normalization statistics
+│       ├── stats_stft_cqt_violin.npz               # Violin normalization statistics
+│       └── stats_unified_stft_cqt.npz              # Combined statistics
 |
 ├── Dataset Preprocessing/
 │   └── Preprocessing_Dataset/
-│       ├── unifies_violin_datasets.py      # Merges Bach and Etudes violin datasets
-│       ├── split_BachViolinDataset.py      # Segments Bach violin recordings
-│       ├── split_PianoMotion10M.py         # Extracts piano segments from PianoMotion10M
-│       ├── split_ViolinEtudes.py           # Segments violin etudes recordings
-│       ├── compute_unified_stats.py        # Computes combined normalization statistics
-│       ├── compute_separated_stats.py      # Computes instrument-specific statistics
-│       ├── read_unified_npz.py            # Utility to inspect unified statistics
-│       ├── read_separated_npz.py          # Utility to inspect separated statistics
-│       ├── dataset_trace_analysis.py      # Analyzes audio characteristics and metrics
-│       └── dataset_variety.py             # Visualizes dataset diversity using t-SNE
+│       ├── unifies_violin_datasets.py              # Merges Bach and Etudes violin datasets
+│       ├── split_BachViolinDataset.py              # Segments Bach violin recordings
+│       ├── split_PianoMotion10M.py                 # Extracts piano segments from PianoMotion10M
+│       ├── split_ViolinEtudes.py                   # Segments violin etudes recordings
+│       ├── compute_unified_stats.py                # Computes combined normalization statistics
+│       ├── compute_separated_stats.py              # Computes instrument-specific statistics
+│       ├── read_unified_npz.py                     # Utility to inspect unified statistics
+│       ├── read_separated_npz.py                   # Utility to inspect separated statistics
+│       ├── dataset_trace_analysis.py               # Analyzes audio characteristics and metrics
+│       └── dataset_variety.py                      # Visualizes dataset diversity using t-SNE
 ```
 
 
@@ -136,12 +136,11 @@ Combined statistics from both instruments:
 
 ## Training Strategy
 The system uses a curriculum learning approach:
-
-Phase 1 (0-20%): Reconstruction-only training
-Phase 2 (20-40%): Add disentanglement losses
-Phase 3 (40-60%): Introduce contrastive learning
-Phase 4 (60-100%): Full adversarial training
-This progressive approach ensures stable training and better convergence.
+- Phase 1 (0-20%): Reconstruction-only training
+- Phase 2 (20-40%): Add disentanglement losses
+- Phase 3 (40-60%): Introduce contrastive learning
+- Phase 4 (60-100%): Full adversarial training
+- This progressive approach ensures stable training and better convergence.
 
 ### Requirements
 ```

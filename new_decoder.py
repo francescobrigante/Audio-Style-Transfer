@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import math
 from style_encoder import SinusoidalPositionalEncoding
+from torch.nn.utils import spectral_norm
 
 class Decoder(nn.Module):
     """
@@ -24,20 +25,26 @@ class Decoder(nn.Module):
         
         # ================== ENCODER CNN  ==================
         self.conv_encoder = nn.Sequential(
-            # Primo blocco: riduzione graduale
-            nn.Conv2d(2, 16, kernel_size=3, padding=1),                    # [B, 16, 287, 513]
+
+            spectral_norm(nn.Conv2d(2, 16, kernel_size=3, padding=1)),                    # [B, 16, 287, 513]
             nn.BatchNorm2d(16),
+            # nn.InstanceNorm2d(16, affine=True),
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),         # [B, 32, 144, 257]
+
+            spectral_norm(nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)),         # [B, 32, 144, 257]
             nn.BatchNorm2d(32),
+            # nn.InstanceNorm2d(32, affine=True),
             nn.ReLU(),
             
             # Secondo blocco: compressione controllata
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),         # [B, 64, 72, 129]
+            spectral_norm(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),         # [B, 64, 72, 129]
             nn.BatchNorm2d(64),
+            # nn.InstanceNorm2d(64, affine=True),
             nn.ReLU(),
-            nn.Conv2d(64, self.feature_dim, kernel_size=3, stride=2, padding=1),  # [B, 64, 36, 65]
+
+            spectral_norm(nn.Conv2d(64, self.feature_dim, kernel_size=3, stride=2, padding=1)),  # [B, 64, 36, 65]
             nn.BatchNorm2d(self.feature_dim),
+            # nn.InstanceNorm2d(self.feature_dim, affine=True),
             nn.ReLU(),
             
             # Compressione finale controllata (mantiene proporzioni)
@@ -46,10 +53,12 @@ class Decoder(nn.Module):
         
         # Proiezione dei canali
         self.spatial_projection = nn.Sequential(
-            nn.Conv2d(self.feature_dim, self.feature_dim, kernel_size=3, padding=1),
+            spectral_norm(nn.Conv2d(self.feature_dim, self.feature_dim, kernel_size=3, padding=1)),
             nn.BatchNorm2d(self.feature_dim),
+            # nn.InstanceNorm2d(self.feature_dim, affine=True),
             nn.ReLU(),
-            nn.Conv2d(self.feature_dim, 1, kernel_size=1),  # [B, 1, 32, 16]
+
+            spectral_norm(nn.Conv2d(self.feature_dim, 1, kernel_size=1)),  # [B, 1, 32, 16]
         )
         
         # Proiezione finale a d_model
@@ -60,27 +69,31 @@ class Decoder(nn.Module):
         
         self.conv_decoder = nn.Sequential(
             # Primo upsampling
-            nn.ConvTranspose2d(1, self.feature_dim, kernel_size=3, stride=2, padding=1, output_padding=1),  # [B, 64, 64, 32]
+            spectral_norm(nn.ConvTranspose2d(1, self.feature_dim, kernel_size=3, stride=2, padding=1, output_padding=1)),  # [B, 64, 64, 32]
             nn.BatchNorm2d(self.feature_dim),
+            # nn.InstanceNorm2d(self.feature_dim, affine=True),
             nn.ReLU(),
             
             # Secondo upsampling
-            nn.ConvTranspose2d(self.feature_dim, 32, kernel_size=3, stride=2, padding=1, output_padding=1),  # [B, 32, 128, 64]
+            spectral_norm(nn.ConvTranspose2d(self.feature_dim, 32, kernel_size=3, stride=2, padding=1, output_padding=1)),  # [B, 32, 128, 64]
             nn.BatchNorm2d(32),
+            # nn.InstanceNorm2d(32, affine=True),
             nn.ReLU(),
             
             # Terzo upsampling
-            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),  # [B, 16, 256, 128]
+            spectral_norm(nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1)),  # [B, 16, 256, 128]
             nn.BatchNorm2d(16),
+            # nn.InstanceNorm2d(16, affine=True),
             nn.ReLU(),
             
             # Quarto upsampling
-            nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1),   # [B, 8, 512, 256]
+            spectral_norm(nn.ConvTranspose2d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1)),   # [B, 8, 512, 256]
             nn.BatchNorm2d(8),
+            # nn.InstanceNorm2d(8, affine=True),
             nn.ReLU(),
             
             # Output finale (reale + immaginario)
-            nn.ConvTranspose2d(8, 2, kernel_size=3, padding=1),  # [B, 2, 512, 256]
+            spectral_norm(nn.ConvTranspose2d(8, 2, kernel_size=3, padding=1)),  # [B, 2, 512, 256]
             
             # Upsampling finale alle dimensioni originali
             nn.Upsample(size=(287, 513), mode='bilinear', align_corners=False)  # [B, 2, 287, 513]
@@ -108,7 +121,8 @@ class Decoder(nn.Module):
         # Token speciale per iniziare la generazione
         self.start_token = nn.Parameter(torch.randn(1, 1, d_model))
         
-        # Layer norm finale
+        # Layer norm
+        self.input_norm  = nn.LayerNorm(d_model)
         self.output_norm = nn.LayerNorm(d_model)
         
         # Dropout per regolarizzazione
@@ -237,6 +251,7 @@ class Decoder(nn.Module):
         
         # Aggiungi positional encoding
         y_emb_seq = self.pos_encoding(y_emb_seq)
+        y_emb_seq = self.input_norm(y_emb_seq)  # [B, S_target, d_model]
         
         # Applica maschera causale
         causal_mask = self.create_causal_mask(S_y).to(device)

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+import torch.nn.utils as utils
 
 # ---------------------------------------------
 # Sinusoidal Positional Encoding Module
@@ -46,17 +47,26 @@ class ResBlock(nn.Module):
         stride = 2 if downsample else 1
         
         # 1st conv: may change #channels or downsample spatial dims
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels,
-            kernel_size=3, padding=1, stride=stride
+        # self.conv1 = nn.Conv2d(
+        #     in_channels, out_channels,
+        #     kernel_size=3, padding=1, stride=stride
+        # )
+
+        # using spectral normalization for stability
+        self.conv1 = utils.spectral_norm(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
         )
         
         self.bn1 = nn.BatchNorm2d(out_channels)
         
         # 2nd conv: keeps dimensions
-        self.conv2 = nn.Conv2d(
-            out_channels, out_channels,
-            kernel_size=3, padding=1
+        # self.conv2 = nn.Conv2d(
+        #     out_channels, out_channels,
+        #     kernel_size=3, padding=1
+        # )
+
+        self.conv2 = utils.spectral_norm(
+            nn.Conv2d(out_channels, out_channels, 3, padding=1)
         )
         
         self.bn2 = nn.BatchNorm2d(out_channels)
@@ -65,11 +75,9 @@ class ResBlock(nn.Module):
         if downsample or in_channels != out_channels:
             # 1x1 conv to match output channels
             self.downsample = nn.Sequential(
-                nn.Conv2d(
-                    in_channels, out_channels,
-                    kernel_size=1, stride=stride
-                ),
-                nn.BatchNorm2d(out_channels)
+                utils.spectral_norm(nn.Conv2d(in_channels, out_channels, 1, stride=stride)),
+                # nn.BatchNorm2d(out_channels)
+                nn.InstanceNorm2d(out_channels, affine=True)        # swapped batch norm with instance for stability
             )
         else:
             # same dimensions, use identity
@@ -170,6 +178,9 @@ class StyleEncoder(nn.Module):
         # Positional encoding
         self.pos_encoder = SinusoidalPositionalEncoding(transformer_dim)
         
+        # Layer normalization
+        self.norm = nn.LayerNorm(transformer_dim)
+        
         # Transformer encoder single layer
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=transformer_dim,
@@ -219,6 +230,7 @@ class StyleEncoder(nn.Module):
             
         # Add positional encoding
         seq = self.pos_encoder(seq)                             # (B, S+1, d)
+        seq = self.norm(seq)                                    # (B, S+1, d) -> normalize across features
         
         # Transformer encoding
         encoded = self.transformer(seq)                         # (B, S+1, d)

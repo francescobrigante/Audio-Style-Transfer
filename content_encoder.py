@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from style_encoder import ResBlock, SinusoidalPositionalEncoding, initialize_weights
+import torch.nn.utils as utils
 
 # it follows the same structure as the style encoder, but with different parameters e.g. channel list
 # another difference is the use of instance spectral normalization
@@ -28,9 +29,8 @@ class ContentEncoder(nn.Module):
             
             # append residual block with instance normalization
             layers.append(ResBlock(prev_chan_size, chan_size, downsample=downsample))
-            layers.append(nn.InstanceNorm2d(chan_size))
-            # layers.append(nn.BatchNorm2d(chan_size))                  con batch norm la varianza di hsic è non nulla -> forse non collassa?
             prev_chan_size = chan_size
+
             
         # global average pooling to time-frequency dimension
         layers.append(nn.AdaptiveAvgPool2d((1, 1)))
@@ -47,6 +47,9 @@ class ContentEncoder(nn.Module):
         
         # Positional encoding
         self.pos_encoder = SinusoidalPositionalEncoding(transformer_dim)
+
+        # layer norm
+        self.norm = nn.LayerNorm(transformer_dim)
         
         # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
@@ -82,6 +85,7 @@ class ContentEncoder(nn.Module):
         
         # Positional encoding
         seq = self.pos_encoder(seq)                                                     # (B, S, transformer_dim)
+        seq = self.norm(seq)                                                            # (B, S, transformer_dim)
         
         # Transformer encoding
         content_emb = self.transformer(seq)                                             # (B, S, transformer_dim)

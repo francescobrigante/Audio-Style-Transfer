@@ -9,6 +9,7 @@ import math
 WINDOW_SIZE = 287
 OVERLAP_PERCENTAGE = 0.3
 OVERLAP_FRAMES = int(WINDOW_SIZE * OVERLAP_PERCENTAGE)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def get_STFT(waveform, n_fft=1024, hop_length=256):
     """
@@ -24,7 +25,9 @@ def get_STFT(waveform, n_fft=1024, hop_length=256):
     if waveform.ndim == 1:
         waveform = waveform.unsqueeze(0)    # (1, samples)
     
-    window = torch.hann_window(n_fft)
+    waveform = waveform.to(DEVICE)  # move to device
+    
+    window = torch.hann_window(n_fft).to(DEVICE)  # create Hann window for STFT
     
     stft = torch.stft(
         waveform, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=True
@@ -75,7 +78,7 @@ def inverse_STFT(stft_tensor, n_fft=1024, hop_length=256):
     
     Output: torch.Tensor (samples,) - reconstructed waveform
     """
-    stft_tensor = stft_tensor.permute(0, 2, 1)  # (2, freq, time)
+    stft_tensor = stft_tensor.permute(0, 2, 1).to(DEVICE)   # (2, freq, time)
     
     real_part = stft_tensor[0, :, :]  # (freq, frames)
     imag_part = stft_tensor[1, :, :]  # (freq, frames)
@@ -84,7 +87,7 @@ def inverse_STFT(stft_tensor, n_fft=1024, hop_length=256):
     stft_complex = stft_complex.unsqueeze(0)  # (1, freq, frames)
     
     # Inverse STFT
-    window = torch.hann_window(n_fft)
+    window = torch.hann_window(n_fft).to(DEVICE) 
     
     waveform = torch.istft(
         stft_complex, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=False

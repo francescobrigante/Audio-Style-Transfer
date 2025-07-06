@@ -214,7 +214,7 @@ def process_test_set(test_dir, output_dir):
     ).to(DEVICE)
     
     # Load pre-trained weights
-    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"checkpoint_epoch_100.pth")
+    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"NEWcheckpoint_epoch_100.pth")
     checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
     content_encoder.load_state_dict(checkpoint['content_encoder'])
     decoder.load_state_dict(checkpoint['decoder'])

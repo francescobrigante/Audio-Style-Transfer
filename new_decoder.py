@@ -248,6 +248,12 @@ class Decoder(nn.Module):
         y_embeddings = self.encode_input(y_flat)    # [B*S_target, d_model]
         y_emb_seq = y_embeddings.view(B_y, S_y, self.d_model)  # [B, S_target, d_model]
         
+        # missing start token handling
+        # make sure to add the start token for the logic but without it being part of the output so no shifting is needed
+        
+        # how could i print and debug decoder forward to make sure i dont need shifting?
+        # in both cases, training and inference
+        
         
         # Aggiungi positional encoding
         y_emb_seq = self.pos_encoding(y_emb_seq)
@@ -267,7 +273,7 @@ class Decoder(nn.Module):
     
     def forward_inference(self, memory, target_length=None):
         """
-        Forward pass per inference autoregressivo
+        Forward pass per inference autoregressivo SENZA aggiunta di start token nell'output, ma CON il suo utilizzo per produrlo
         
         Args:
             memory: [B, 2*S_content, d_model] - Memoria per cross-attention
@@ -310,7 +316,7 @@ class Decoder(nn.Module):
             generated_sequence = torch.cat([generated_sequence, next_token], dim=1)
         
         # Combina tutti gli output generati
-        decoder_output = torch.cat(generated_outputs, dim=1)  # [B, target_length, d_model]
+        decoder_output = torch.cat(generated_outputs, dim=1)                                    # [B, target_length = S, d_model]
         
         return self.generate_output(decoder_output)
     

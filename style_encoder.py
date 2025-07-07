@@ -122,6 +122,7 @@ class DeepCNN(nn.Module):
         # global average pooling to (1,1) on time-frequency dimensions
         # this reduces the output to (B*S, last_chan_size, 1, 1)
         # where prev_chan_size is the last ResBlock's output channels
+        
         layers.append(nn.AdaptiveAvgPool2d((1, 1)))
         self.net = nn.Sequential(*layers)
         

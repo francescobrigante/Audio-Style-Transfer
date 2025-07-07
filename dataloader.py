@@ -3,14 +3,17 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import os
 from utilityFunctions import load_audio, get_CQT, get_STFT, get_overlap_windows
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def normalize(x, mean, std, eps=1e-8):
     if mean.ndim == 2:
-        mean = mean.unsqueeze(1)  
-        std = std.unsqueeze(1)
+        mean = mean.unsqueeze(1).to(x.device)  
+        std = std.unsqueeze(1).to(x.device)
     return (x - mean) / (std + eps)
 
 def concat_stft_cqt(stft, cqt):
+    stft = stft.to(device)
+    cqt = cqt.to(device)
     return torch.cat((stft, cqt), dim=2)
 
 class DualInstrumentDataset(Dataset):

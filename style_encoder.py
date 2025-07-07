@@ -112,22 +112,25 @@ class DeepCNN(nn.Module):
         prev_chan_size = in_channels
         
         # create 6 ResBlocks with increasing channel sizes
-        # first 4 blocks downsample, last 2 keep spatial dimensions
+        # number to set how many ResBlocks to downsample
+        downsample_number = 100
         for idx, chan_size in enumerate(channels_list):
-            downsample_boolean = idx < 4
+            downsample_boolean = idx < downsample_number
             layers.append(ResBlock(prev_chan_size, chan_size, downsample=downsample_boolean))
             prev_chan_size = chan_size
             
+        # (B*S, last_chan_size=512, 5, 10) if downsample applied to all blocks
             
-        # global average pooling to (1,1) on time-frequency dimensions
-        # this reduces the output to (B*S, last_chan_size, 1, 1)
-        # where prev_chan_size is the last ResBlock's output channels
-        
-        layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+        layers.append(nn.AdaptiveAvgPool2d((2, 5)))  # (B*S, last_chan_size=512, 2, 5)
+        layers.append(nn.AdaptiveAvgPool2d((1, 1)))             # (B*S, last_chan_size=512, 1, 1)
         self.net = nn.Sequential(*layers)
         
         # projection to final embedding dimension
         self.proj = nn.Linear(prev_chan_size, out_dim)          # (B*S, out_dim)
+        
+        # in content encoder remove layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
+        # so we will be projecting from 512*2*5 = 5120 to out_dim = 512 keeping granularity
+        # while in style encoder we will use nn.AdaptiveAvgPool2d((1, 1)) to get final output shape (B*S, 512, 1, 1) discarding granularity
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x shape: (B*S, 2, T, F)

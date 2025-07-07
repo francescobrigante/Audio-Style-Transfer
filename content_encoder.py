@@ -15,8 +15,7 @@ class ContentEncoder(nn.Module):
         transformer_dim: int = 256,
         num_heads: int = 4,
         num_layers: int = 4,
-        channels_list: list = [16, 32, 64, 128, 256]
-        # channels_list: list = [32, 64, 128, 256, 512, 512]) EDIT <----
+        channels_list: list = [32, 64, 128, 256, 512, 512]
     ):
         super().__init__()
         
@@ -24,21 +23,27 @@ class ContentEncoder(nn.Module):
         layers = []
         prev_chan_size = in_channels
         
+        # number to set how many ResBlocks to downsample
+        downsample_number = 100
         for idx, chan_size in enumerate(channels_list):
-            # downsample all channels except the last one
-            downsample = idx < len(channels_list) - 1 
-            
-            # append residual block with instance normalization
-            layers.append(ResBlock(prev_chan_size, chan_size, downsample=downsample))
+            downsample_boolean = idx < downsample_number
+            layers.append(ResBlock(prev_chan_size, chan_size, downsample=downsample_boolean))
             prev_chan_size = chan_size
 
             
         # global average pooling to time-frequency dimension
-        layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+        # (B*S, last_chan_size=512, 5, 10) if downsample applied to all blocks
+            
+        layers.append(nn.AdaptiveAvgPool2d((2, 5)))  # (B*S, last_chan_size=512, 2, 5)
+        # layers.append(nn.AdaptiveAvgPool2d((1, 1)))             # (B*S, last_chan_size=512, 1, 1)
         self.cnn = nn.Sequential(*layers)
         
+        # in content encoder remove layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
+        # so we will be projecting from 512*2*5 = 5120 to out_dim = 512 keeping granularity
+        
         # projection to final cnn embedding dimension
-        self.proj = nn.Linear(prev_chan_size, cnn_out_dim)
+        flat_dim = prev_chan_size * 2 * 5
+        self.proj = nn.Linear(flat_dim, cnn_out_dim)
         
         # Linear projection (CNN out dim -> transformer dim) if needed
         self.input_proj = (
@@ -73,8 +78,8 @@ class ContentEncoder(nn.Module):
         
         # CNN
         x = x.view(B * S, C, T, F)                                                      # (B*S, 2, T, F)
-        cnn_features = self.cnn(x)                                                      # (B*S, last_chan_size, 1, 1)
-        cnn_features = cnn_features.view(cnn_features.size(0), -1)                      # (B*S, last_chan_size)
+        cnn_features = self.cnn(x)                                                      # (B*S, last_chan_size, 2, 5)
+        cnn_features = cnn_features.view(cnn_features.size(0), -1)                      # (B*S, last_chan_size*2*5)
         
         # Project to cnn_out_dim if last_chan_size != cnn_out_dim
         cnn_features = self.proj(cnn_features)                                          # (B*S, cnn_out_dim)

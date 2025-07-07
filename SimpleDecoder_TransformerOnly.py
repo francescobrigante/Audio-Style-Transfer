@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from style_encoder import SinusoidalPositionalEncoding
+import numpy as np
+
 
 
 class Decoder(nn.Module):
@@ -54,15 +56,16 @@ class Decoder(nn.Module):
 
     def encode_input(self, x):
         B, S, C, H, W = x.shape
-        x = x.view(B * S, -1)
+        x = x.contiguous().reshape(B * S, -1)  # [B*S, 2*287*513]
         embeddings = self.stft_to_embedding(x)  # [B*S, d_model]
-        return embeddings.view(B, S, self.d_model)
+        return embeddings.reshape(B, S, self.d_model)  # [B, S, d_model]
 
     def generate_output(self, decoder_outputs):
         B, S, D = decoder_outputs.shape
         decoder_outputs = self.output_norm(decoder_outputs)
         stft_flat = self.embedding_to_stft(decoder_outputs)  # [B, S, 2*287*513]
-        return stft_flat.view(B, S, 2, 287, 513)
+        return stft_flat.contiguous().reshape(B, S, 2, 287, 513)  # [B, S, 2, 287, 513]
+
 
     def create_causal_mask(self, seq_len, device):
         return torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()

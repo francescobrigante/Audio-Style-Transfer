@@ -229,47 +229,45 @@ class Decoder(nn.Module):
         return memory
     
     def forward_training(self, y, memory):
-        """
-        Forward pass per training con teacher forcing
-        
-        Args:
-            y: [B, S_target, 2, 287, 513] - Target STFT
-            memory: [B, 2*S_content, d_model] - Memoria per cross-attention
-            
-        Returns:
-            [B, S_target, 2, 287, 513] - STFT predetto
-        """
-        B_y, S_y, C_y, H_y, W_y = y.shape
-        device = y.device
-        
-        # Codifica la sequenza target        
-        # Estrai embeddings per ogni frame in modo più efficiente
-        y_flat = y.view(B_y * S_y, C_y, H_y, W_y)  # [B*S_target, 2, 287, 513]
-        y_embeddings = self.encode_input(y_flat)    # [B*S_target, d_model]
-        y_emb_seq = y_embeddings.view(B_y, S_y, self.d_model)  # [B, S_target, d_model]
-        
-        # missing start token handling
-        # make sure to add the start token for the logic but without it being part of the output so no shifting is needed
-        
-        # how could i print and debug decoder forward to make sure i dont need shifting?
-        # in both cases, training and inference
-        
-        
-        # Aggiungi positional encoding
-        y_emb_seq = self.pos_encoding(y_emb_seq)
-        y_emb_seq = self.input_norm(y_emb_seq)  # [B, S_target, d_model]
-        
-        # Applica maschera causale
-        causal_mask = self.create_causal_mask(S_y).to(device)
-        
-        # Transformer decoder con teacher forcing
-        decoder_output = self.transformer_decoder(
-            tgt=y_emb_seq,
-            memory=memory,
-            tgt_mask=causal_mask
-        )  # [B, S_y, d_model]
-        
-        return self.generate_output(decoder_output)
+      """
+      Forward pass per training con teacher forcing.
+      
+      Args:
+          y: [B, S_target, 2, 287, 513] - Target STFT
+          memory: [B, 2*S_content, d_model] - Memoria per cross-attention
+          
+      Returns:
+          [B, S_target, 2, 287, 513] - STFT predetto
+      """
+      B_y, S_y, C_y, H_y, W_y = y.shape
+      device = y.device
+
+      # --- Codifica la sequenza target (senza start token) ---
+      y_flat = y.view(B_y * S_y, C_y, H_y, W_y)  # [B*S, 2, 287, 513]
+      y_embeddings = self.encode_input(y_flat)   # [B*S, d_model]
+      y_emb_seq = y_embeddings.view(B_y, S_y, self.d_model)  # [B, S, d_model]
+
+      # --- Inserisci lo start token e shift a destra ---
+      start_token = self.start_token.expand(B_y, 1, -1)  # [B, 1, d_model]
+      y_shifted = torch.cat([start_token, y_emb_seq[:, :-1, :]], dim=1)  # [B, S, d_model]
+
+      # --- Positional encoding e normalization ---
+      y_shifted = self.pos_encoding(y_shifted)
+      y_shifted = self.input_norm(y_shifted)
+
+      # --- Maschera causale per il decoder ---
+      causal_mask = self.create_causal_mask(S_y).to(device)
+
+      # --- Transformer decoder ---
+      decoder_output = self.transformer_decoder(
+          tgt=y_shifted,       # [B, S, d_model] shifted + start token
+          memory=memory,       # [B, 2*S_content, d_model]
+          tgt_mask=causal_mask
+      )  # Output: [B, S, d_model]
+
+      # --- Genera la STFT predetta ---
+      return self.generate_output(decoder_output)
+
     
     def forward_inference(self, memory, target_length=None):
         """
@@ -348,7 +346,7 @@ class Decoder(nn.Module):
 
 
 def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase=0.2, 
-                              lambda_spectral=0.1, lambda_consistency=0.1):
+                              lambda_spectral=0.1):
     """
     Loss function comprensiva per audio style transfer - CORRETTA
     
@@ -385,15 +383,13 @@ def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase
     phase_loss = F.mse_loss(phase_diff, torch.zeros_like(phase_diff))
     
     # ================== TEMPORAL CONSISTENCY LOSS ==================
-    temporal_loss = torch.tensor(0.0, device=output.device)
+    # Versione migliorata senza ciclo for
     if S > 1:
-        # Consistenza temporale dei frame
-        for s in range(S-1):
-            # Differenza temporale nell'output
-            temp_diff_out = output[:, s+1] - output[:, s]
-            temp_diff_tgt = target[:, s+1] - target[:, s]
-            temporal_loss += F.mse_loss(temp_diff_out, temp_diff_tgt)
-        temporal_loss /= (S-1)
+      temp_diff_out = output[:, 1:] - output[:, :-1]  # shape: [B, S-1, 2, Freq, T]
+      temp_diff_tgt = target[:, 1:] - target[:, :-1]
+      temporal_loss = F.mse_loss(temp_diff_out, temp_diff_tgt)
+    else:
+      temporal_loss = torch.tensor(0.0, device=output.device)
     
     # ================== SPECTRAL CONSISTENCY LOSS ==================
     # Consistenza lungo la dimensione delle frequenze
@@ -403,16 +399,7 @@ def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase
         spectral_grad_out = output[:, :, :, 1:, :] - output[:, :, :, :-1, :]
         spectral_grad_tgt = target[:, :, :, 1:, :] - target[:, :, :, :-1, :]
         spectral_loss = F.mse_loss(spectral_grad_out, spectral_grad_tgt)
-    
-    # ================== MAGNITUDE-PHASE CONSISTENCY LOSS ==================
-    # Assicura che magnitude e phase siano coerenti con la rappresentazione complessa
-    reconstructed_real = mag_output * torch.cos(phase_output)
-    reconstructed_imag = mag_output * torch.sin(phase_output)
-    
-    consistency_loss = (
-        F.mse_loss(reconstructed_real, output[:, :, 0]) +
-        F.mse_loss(reconstructed_imag, output[:, :, 1])
-    )
+
     
     # ================== LOSS TOTALE ==================
     total_loss = (
@@ -420,8 +407,7 @@ def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase
         0.5 * mag_loss +
         lambda_phase * phase_loss +
         lambda_temporal * temporal_loss +
-        lambda_spectral * spectral_loss +
-        lambda_consistency * consistency_loss
+        lambda_spectral * spectral_loss
     )
     
     return {
@@ -430,7 +416,5 @@ def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase
         'mag_loss': mag_loss,
         'phase_loss': phase_loss,
         'temporal_loss': temporal_loss,
-        'spectral_loss': spectral_loss,
-        'consistency_loss': consistency_loss
+        'spectral_loss': spectral_loss
     }
-

@@ -147,10 +147,10 @@ class Decoder(nn.Module):
         Codifica l'input STFT preservando la struttura spaziale
         
         Args:
-            x: [B, 2, 287, 513] - STFT complesso
+            x: [B, S, 2, 287, 513] - STFT complesso
             
         Returns:
-            [B, d_model] - Embedding dell'input
+            [B * S, d_model] - Embedding dell'input
         """
         # Estrai feature preservando la struttura
         features = self.conv_encoder(x)  # [B, 64, 32, 16]

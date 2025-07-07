@@ -107,10 +107,13 @@ def adversarial_loss(
         class_loss = nn.CrossEntropyLoss()(class_pred, class_labels)
         discriminator_loss += lambda_class * class_loss
         
-    
+
+    # separate logics    
     if compute_for_discriminator:
         generator_loss = None
+        
     else:
+        # experiment with minimizing negative CE loss => maximizing CE loss <--------
         # minimize -entropy => maximize entropy => uniform distribution 
         content_probs = torch.softmax(content_pred, dim=-1)
         content_entropy = -torch.sum(content_probs * torch.log(content_probs + 1e-8), dim=-1).mean()

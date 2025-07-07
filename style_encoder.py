@@ -134,6 +134,9 @@ class DeepCNN(nn.Module):
         x = x.view(x.size(0), -1)                               # (B*S, last_chan_size)
         x = self.proj(x)                                        # (B*S, out_dim)
         return x
+        # verifica prima shape prima del pool
+        # eventuale downsample per più layer
+        # eventuale pool quadrato o rettangolare + flattening (riga 134)
 
 
 

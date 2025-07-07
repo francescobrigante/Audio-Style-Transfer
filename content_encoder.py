@@ -16,6 +16,7 @@ class ContentEncoder(nn.Module):
         num_heads: int = 4,
         num_layers: int = 4,
         channels_list: list = [16, 32, 64, 128, 256]
+        # channels_list: list = [32, 64, 128, 256, 512, 512]) EDIT <----
     ):
         super().__init__()
         

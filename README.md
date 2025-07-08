@@ -35,7 +35,8 @@ Audio-Style-Transfer/
 │   ├── style_encoder.py                            # Style encoder with CNN + Transformer
 │   ├── content_encoder.py                          # Content encoder for musical structure
 │   ├── new_decoder.py                              # Dynamic autoregressive decoder
-│   └── discriminator.py                            # Adversarial discriminator
+│   ├── discriminator.py                            # Adversarial discriminator
+│   └── SimpleDecoder_TransformerOnly.py            # Transformer-only decoder
 │
 ├── Training & Loss Functions/
 │   ├── losses.py                                   # InfoNCE, margin, adversarial, HSIC losses
@@ -43,9 +44,14 @@ Audio-Style-Transfer/
 │   ├── train.ipynb                                 # Basic training notebook
 │   └── train2.ipynb                                # Advanced training with curriculum learning
 │
+│
+├── Evaluation/
+│
+│
 ├── Utilities & Testing/
 │   ├── utilityFunctions.py                         # STFT/CQT processing, audio I/O
 │   ├── test_correctness.ipynb                      # Model validation and testing
+│   ├── style_transfer_inference_test.ipynb         # Notebook for style transfer inference and audio export
 │   └── style_transfer_inference.py                 # Inference script for style transfer
 │
 ├── Dataset Statistics/
@@ -80,8 +86,7 @@ Implements the StyleEncoder class using ResNet-like CNN blocks followed by trans
 - Uses full STFT + CQT
 
 #### `content_encoder.py`
-ContentEncoder for extracting musical content representations. Architecture similar to style encoder, key differences:
-- Uses instance normalization instead of batch normalization
+ContentEncoder for extracting musical content representations. Architecture similar to style encoder.
 - No CLS token to focus on temporal content structure
 - Outputs sequence-level embeddings for temporal modeling, perfect for the autoregressive decoder
 
@@ -135,12 +140,19 @@ Combined statistics from both instruments:
 - Maintains compatibility with different data configurations
 
 ## Training Strategy
-The system uses a curriculum learning approach:
+Implemented also a curriculum learning approach:
 - Phase 1 (0-20%): Reconstruction-only training
 - Phase 2 (20-40%): Add disentanglement losses
 - Phase 3 (40-60%): Introduce contrastive learning
 - Phase 4 (60-100%): Full adversarial training
 This progressive approach ensures stable training and better convergence.
+
+## Results and resources
+Despite our experiments, the results were not convincing enough, some losses were oscillating too much indicating instability and the model wasn’t reconstructing properly.
+However we are strongly convinced of the foundations and mathematical proofs behind our choices and we believe that further experiments and refinements could lead to proper learning.
+
+### Resources
+Dataset, statistics and checkpoints: https://drive.google.com/drive/folders/13P5gLzAJPyDuhp-urVOHHelahs5rQehu?usp=sharing
 
 ### Requirements
 ```

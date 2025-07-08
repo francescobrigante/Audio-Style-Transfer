@@ -45,12 +45,6 @@ class ResBlock(nn.Module):
         # if downsample, use stride=2 to halve spatial dimensions
         # otherwise, keep stride=1 to maintain dimensions
         stride = 2 if downsample else 1
-        
-        # 1st conv: may change #channels or downsample spatial dims
-        # self.conv1 = nn.Conv2d(
-        #     in_channels, out_channels,
-        #     kernel_size=3, padding=1, stride=stride
-        # )
 
         # using spectral normalization for stability
         self.conv1 = utils.spectral_norm(
@@ -59,11 +53,6 @@ class ResBlock(nn.Module):
         
         self.bn1 = nn.BatchNorm2d(out_channels)
         
-        # 2nd conv: keeps dimensions
-        # self.conv2 = nn.Conv2d(
-        #     out_channels, out_channels,
-        #     kernel_size=3, padding=1
-        # )
 
         self.conv2 = utils.spectral_norm(
             nn.Conv2d(out_channels, out_channels, 3, padding=1)
@@ -128,7 +117,7 @@ class DeepCNN(nn.Module):
         # projection to final embedding dimension
         self.proj = nn.Linear(prev_chan_size, out_dim)          # (B*S, out_dim)
         
-        # in content encoder remove layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
+        # in content encoder try removing layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
         # so we will be projecting from 512*2*5 = 5120 to out_dim = 512 keeping granularity
         # while in style encoder we will use nn.AdaptiveAvgPool2d((1, 1)) to get final output shape (B*S, 512, 1, 1) discarding granularity
 

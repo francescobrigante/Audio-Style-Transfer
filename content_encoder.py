@@ -4,8 +4,7 @@ import math
 from style_encoder import ResBlock, SinusoidalPositionalEncoding, initialize_weights
 import torch.nn.utils as utils
 
-# it follows the same structure as the style encoder, but with different parameters e.g. channel list
-# another difference is the use of instance spectral normalization
+# it follows the same structure as the style encoder
 # we no longer use CLS token
 class ContentEncoder(nn.Module):
     def __init__(
@@ -38,7 +37,7 @@ class ContentEncoder(nn.Module):
         layers.append(nn.AdaptiveAvgPool2d((1, 1)))             # (B*S, last_chan_size=512, 1, 1)
         self.cnn = nn.Sequential(*layers)
         
-        # in content encoder remove layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
+        # in content encoder try removing layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
         # so we will be projecting from 512*2*5 = 5120 to out_dim = 512 keeping granularity
         
         # projection to final cnn embedding dimension

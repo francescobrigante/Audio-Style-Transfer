@@ -10,7 +10,8 @@ from scipy.stats import pearsonr
 from sklearn.metrics import f1_score
 from content_encoder import ContentEncoder
 from style_encoder import StyleEncoder
-from new_decoder import Decoder  # Use the new decoder
+# from new_decoder import Decoder  # Use the new decoder
+from SimpleDecoder_TransformerOnly import Decoder
 from utilityFunctions import get_STFT, get_CQT, inverse_STFT, get_overlap_windows, sections2spectrogram, concat_stft_cqt
 
 # Configurations
@@ -27,7 +28,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SECTION_LENGTH = 1.0
 
 # Paths
-TEST_DIR = r"dataset\test"
+TEST_DIR = r"dataset/test"
 OUTPUT_DIR = r"result_evaluation_test"
 SAVED_MODELS_DIR = r"checkpoints"
 
@@ -255,7 +256,8 @@ def process_test_set_with_dataloader(test_dir, output_dir):
         num_layers=4
     ).to(DEVICE)
     
-    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"checkpoint_epoch_100.pth")
+    # load checkpoint here
+    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"epoch100_simpleDecoder.pth")
     
     if os.path.exists(checkpoint_path):
         print(f"📂 Loading checkpoint: {checkpoint_path}")
@@ -371,7 +373,11 @@ def process_test_set_with_dataloader(test_dir, output_dir):
                         f.write(f"Metrics for {source_class} (batch {batch_idx}, sample {i})\n")
                         f.write(f"{'-'*50}\n")
                         for metric_name, value in metrics_result.items():
-                            f.write(f"{metric_name.replace('_', ' ').title()}: {value:.4f if np.isfinite(value) else value}\n")
+                            if np.isfinite(value):
+                                value_str = f"{value:.4f}"
+                            else:
+                                value_str = str(value)
+                            f.write(f"{metric_name.replace('_', ' ').title()}: {value_str}\n")
                     
                     print(f"     Saved metrics to: {output_filename}")
                     

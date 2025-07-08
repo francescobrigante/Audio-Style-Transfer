@@ -8,12 +8,13 @@ from pathlib import Path
 import random
 from scipy.stats import pearsonr
 from content_encoder import ContentEncoder
-from new_decoder import Decoder
+# from new_decoder import Decoder
+from SimpleDecoder_TransformerOnly import Decoder
 from style_encoder import StyleEncoder
 from discriminator import Discriminator
 from utilityFunctions import get_STFT, get_CQT, inverse_STFT, get_overlap_windows, sections2spectrogram, concat_stft_cqt
 from torch.utils.data import DataLoader
-from dataloader import DualInstrumentDataset, collate_fn
+from dataloader import DualInstrumentDataset, custom_collate_fn
 
 # Configurations
 SAMPLE_RATE = 22050
@@ -29,10 +30,10 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SECTION_LENGTH = 1.0
 
 # Path
-TEST_DIR = r"dataset\test"
+TEST_DIR = r"dataset/test"
 OUTPUT_DIR = r"result_evaluation_style_transfer"
-SAVED_MODELS_DIR = r"checkpoints1"
-path_class_embeddings = "class_embeddings.pth"
+SAVED_MODELS_DIR = r"checkpoints"
+
 
 # funzione per generare class_embeddings dal primo batch
 def generate_class_embeddings_from_dataloader(style_encoder, test_loader, device):
@@ -239,7 +240,9 @@ def process_test_set(test_dir, output_dir, batch_size=8):
         hidden_dim=128
     ).to(DEVICE)
     
-    checkpoint_path = os.path.join(SAVED_MODELS_DIR, 'checkpoint_epoch_100.pth')
+    # load pre-trained weights here
+    checkpoint_path = os.path.join(SAVED_MODELS_DIR, 'epoch100_simpleDecoder.pth')
+    
     checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
     content_encoder.load_state_dict(checkpoint['content_encoder'])
     style_encoder.load_state_dict(checkpoint['style_encoder'])
@@ -260,7 +263,7 @@ def process_test_set(test_dir, output_dir, batch_size=8):
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        collate_fn=collate_fn
+        collate_fn=custom_collate_fn
     )
     
     metrics = {

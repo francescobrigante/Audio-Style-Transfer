@@ -44,6 +44,7 @@ class ContentEncoder(nn.Module):
         # projection to final cnn embedding dimension
         flat_dim = prev_chan_size * 2 * 5
         self.proj = nn.Linear(flat_dim, cnn_out_dim)
+        # self.proj = nn.Linear(prev_chan_size, cnn_out_dim)
         
         # Linear projection (CNN out dim -> transformer dim) if needed
         self.input_proj = (

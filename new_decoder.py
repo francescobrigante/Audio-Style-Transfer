@@ -367,54 +367,55 @@ def compute_comprehensive_loss(output, target, lambda_temporal=0.3, lambda_phase
     # MSE loss su tutto
     mse_loss = F.mse_loss(output, target)
     
-    # ================== MAGNITUDE E PHASE LOSS ==================
-    # Calcola magnitude e phase
-    mag_output = torch.sqrt(output[:, :, 0]**2 + output[:, :, 1]**2 + 1e-8)  # Aggiunta stabilità numerica
-    mag_target = torch.sqrt(target[:, :, 0]**2 + target[:, :, 1]**2 + 1e-8)
-    mag_loss = F.mse_loss(mag_output, mag_target)
+    # # ================== MAGNITUDE E PHASE LOSS ==================
+    # # Calcola magnitude e phase
+    # mag_output = torch.sqrt(output[:, :, 0]**2 + output[:, :, 1]**2 + 1e-8)  # Aggiunta stabilità numerica
+    # mag_target = torch.sqrt(target[:, :, 0]**2 + target[:, :, 1]**2 + 1e-8)
+    # mag_loss = F.mse_loss(mag_output, mag_target)
     
-    # Loss di fase (più stabile con atan2)
-    phase_output = torch.atan2(output[:, :, 1], output[:, :, 0])
-    phase_target = torch.atan2(target[:, :, 1], target[:, :, 0])
+    # # Loss di fase (più stabile con atan2)
+    # phase_output = torch.atan2(output[:, :, 1], output[:, :, 0])
+    # phase_target = torch.atan2(target[:, :, 1], target[:, :, 0])
     
-    # Gestisci il wrapping della fase
-    phase_diff = phase_output - phase_target
-    phase_diff = torch.remainder(phase_diff + np.pi, 2*np.pi) - np.pi
-    phase_loss = F.mse_loss(phase_diff, torch.zeros_like(phase_diff))
+    # # Gestisci il wrapping della fase
+    # phase_diff = phase_output - phase_target
+    # phase_diff = torch.remainder(phase_diff + np.pi, 2*np.pi) - np.pi
+    # phase_loss = F.mse_loss(phase_diff, torch.zeros_like(phase_diff))
     
-    # ================== TEMPORAL CONSISTENCY LOSS ==================
-    # Versione migliorata senza ciclo for
-    if S > 1:
-      temp_diff_out = output[:, 1:] - output[:, :-1]  # shape: [B, S-1, 2, Freq, T]
-      temp_diff_tgt = target[:, 1:] - target[:, :-1]
-      temporal_loss = F.mse_loss(temp_diff_out, temp_diff_tgt)
-    else:
-      temporal_loss = torch.tensor(0.0, device=output.device)
+    # # ================== TEMPORAL CONSISTENCY LOSS ==================
+    # # Versione migliorata senza ciclo for
+    # if S > 1:
+    #   temp_diff_out = output[:, 1:] - output[:, :-1]  # shape: [B, S-1, 2, Freq, T]
+    #   temp_diff_tgt = target[:, 1:] - target[:, :-1]
+    #   temporal_loss = F.mse_loss(temp_diff_out, temp_diff_tgt)
+    # else:
+    #   temporal_loss = torch.tensor(0.0, device=output.device)
     
-    # ================== SPECTRAL CONSISTENCY LOSS ==================
-    # Consistenza lungo la dimensione delle frequenze
-    spectral_loss = torch.tensor(0.0, device=output.device)
-    if Freq > 1:
-        # Gradiente spettrale
-        spectral_grad_out = output[:, :, :, 1:, :] - output[:, :, :, :-1, :]
-        spectral_grad_tgt = target[:, :, :, 1:, :] - target[:, :, :, :-1, :]
-        spectral_loss = F.mse_loss(spectral_grad_out, spectral_grad_tgt)
+    # # ================== SPECTRAL CONSISTENCY LOSS ==================
+    # # Consistenza lungo la dimensione delle frequenze
+    # spectral_loss = torch.tensor(0.0, device=output.device)
+    # if Freq > 1:
+    #     # Gradiente spettrale
+    #     spectral_grad_out = output[:, :, :, 1:, :] - output[:, :, :, :-1, :]
+    #     spectral_grad_tgt = target[:, :, :, 1:, :] - target[:, :, :, :-1, :]
+    #     spectral_loss = F.mse_loss(spectral_grad_out, spectral_grad_tgt)
 
     
     # ================== LOSS TOTALE ==================
     total_loss = (
-        mse_loss +
-        0.5 * mag_loss +
-        lambda_phase * phase_loss +
-        lambda_temporal * temporal_loss +
-        lambda_spectral * spectral_loss
+        2 * mse_loss 
+        # 0.5 * mag_loss
+        # + lambda_phase * phase_loss +
+        # lambda_temporal * temporal_loss +
+        # lambda_spectral * spectral_loss
     )
     
     return {
         'total_loss': total_loss,
         'mse_loss': mse_loss,
-        'mag_loss': mag_loss,
-        'phase_loss': phase_loss,
-        'temporal_loss': temporal_loss,
-        'spectral_loss': spectral_loss
+        # 'mag_loss': mag_loss,
+        # 'phase_loss': phase_loss,
+        # 'temporal_loss': temporal_loss,
+        # 'spectral_loss': spectral_loss
     }
+

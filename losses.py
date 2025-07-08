@@ -115,10 +115,10 @@ def adversarial_loss(
     else:
         # experiment with minimizing negative CE loss => maximizing CE loss <--------
         # minimize -entropy => maximize entropy => uniform distribution 
-        # content_probs = torch.softmax(content_pred, dim=-1)
-        # content_entropy = -torch.sum(content_probs * torch.log(content_probs + 1e-8), dim=-1).mean()
-        # generator_loss = - lambda_content * content_entropy 
-        generator_loss = - lambda_content * content_loss
+        content_probs = torch.softmax(content_pred, dim=-1)
+        content_entropy = -torch.sum(content_probs * torch.log(content_probs + 1e-8), dim=-1).mean()
+        generator_loss = - lambda_content * content_entropy 
+        #generator_loss = - lambda_content * content_loss
 
     return discriminator_loss, generator_loss
 

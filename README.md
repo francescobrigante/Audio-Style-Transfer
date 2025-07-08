@@ -6,6 +6,8 @@ Neural Audio Style Transfer between piano and violin using GAN-based Encoder-Dec
 
 This project implements a deep learning system that can transfer the style characteristics between different musical instruments while preserving the musical content. The system uses a combination of STFT and CQT representations (using both real and imaginary parts), 2 transformer encoders: one for style and one for content, an autoregressive decoder and a discriminator to perform adversarial training using also contrastive and reconstruction losses.
 
+For further details, read the full paper [Distentangled Latent Representations for Audio Style Transfer.pdf](/Disentangled%20Latent%20Representations%20for%20Audio%20Style%20Transfer.pdf)
+
 ## Key Features
 
 - **Operating in the full complex domain**: Many musical models discard phase information, which is essential for a better reconstruction
@@ -46,13 +48,14 @@ Audio-Style-Transfer/
 │
 │
 ├── Evaluation/
+│   ├── evaluation_reconstruction.py                # evaluation file for reconstruction sequence modeling task
+│   └── evaluation_style_transfer.py                # evaluation file for audio style transfer
 │
 │
 ├── Utilities & Testing/
 │   ├── utilityFunctions.py                         # STFT/CQT processing, audio I/O
 │   ├── test_correctness.ipynb                      # Model validation and testing
-│   ├── style_transfer_inference_test.ipynb         # Notebook for style transfer inference and audio export
-│   └── style_transfer_inference.py                 # Inference script for style transfer
+│   └── style_transfer_inference_test.ipynb         # Notebook for style transfer inference and audio export
 │
 ├── Dataset Statistics/
 │   └── train_set_stats/

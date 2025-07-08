@@ -10,8 +10,8 @@ from scipy.stats import pearsonr
 from sklearn.metrics import f1_score
 from content_encoder import ContentEncoder
 from style_encoder import StyleEncoder
-# from new_decoder import Decoder  # Use the new decoder
-from SimpleDecoder_TransformerOnly import Decoder
+from new_decoder import Decoder  # Use the new decoder
+# from SimpleDecoder_TransformerOnly import Decoder
 from utilityFunctions import get_STFT, get_CQT, inverse_STFT, get_overlap_windows, sections2spectrogram, concat_stft_cqt
 
 # Configurations
@@ -240,7 +240,8 @@ def process_test_set_with_dataloader(test_dir, output_dir):
         transformer_dim=TRANSFORMER_DIM,
         num_heads=4,
         num_layers=4,
-        channels_list=[16, 32, 64, 128, 256]
+        # channels_list=[16, 32, 64, 128, 256] old example
+        channels_list = [32, 64, 128, 256, 512, 512]
     ).to(DEVICE)
     
     decoder = Decoder(
@@ -257,7 +258,7 @@ def process_test_set_with_dataloader(test_dir, output_dir):
     ).to(DEVICE)
     
     # load checkpoint here
-    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"epoch100_simpleDecoder.pth")
+    checkpoint_path = os.path.join(SAVED_MODELS_DIR, f"NEWDECODERcheckpoint_epoch_70.pth")
     
     if os.path.exists(checkpoint_path):
         print(f"📂 Loading checkpoint: {checkpoint_path}")

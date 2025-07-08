@@ -8,8 +8,8 @@ from pathlib import Path
 import random
 from scipy.stats import pearsonr
 from content_encoder import ContentEncoder
-# from new_decoder import Decoder
-from SimpleDecoder_TransformerOnly import Decoder
+from new_decoder import Decoder
+# from SimpleDecoder_TransformerOnly import Decoder
 from style_encoder import StyleEncoder
 from discriminator import Discriminator
 from utilityFunctions import get_STFT, get_CQT, inverse_STFT, get_overlap_windows, sections2spectrogram, concat_stft_cqt
@@ -222,7 +222,8 @@ def process_test_set(test_dir, output_dir, batch_size=8):
         transformer_dim=TRANSFORMER_DIM,
         num_heads=4,
         num_layers=4,
-        channels_list=[16, 32, 64, 128, 256]
+        # channels_list=[16, 32, 64, 128, 256]          old example old model
+        channels_list = [32, 64, 128, 256, 512, 512]
     ).to(DEVICE)
     style_encoder = StyleEncoder(
         cnn_out_dim=TRANSFORMER_DIM,
@@ -241,7 +242,7 @@ def process_test_set(test_dir, output_dir, batch_size=8):
     ).to(DEVICE)
     
     # load pre-trained weights here
-    checkpoint_path = os.path.join(SAVED_MODELS_DIR, 'epoch100_simpleDecoder.pth')
+    checkpoint_path = os.path.join(SAVED_MODELS_DIR, 'NEWDECODERcheckpoint_epoch_70.pth')
     
     checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
     content_encoder.load_state_dict(checkpoint['content_encoder'])

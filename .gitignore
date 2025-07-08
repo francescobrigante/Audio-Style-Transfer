@@ -5,7 +5,6 @@ data/
 
 # Model checkpoints and saved models
 saved_models/
-checkpoints/
 *.pth
 *.pt
 *.ckpt

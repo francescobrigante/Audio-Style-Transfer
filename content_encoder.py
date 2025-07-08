@@ -35,16 +35,16 @@ class ContentEncoder(nn.Module):
         # (B*S, last_chan_size=512, 5, 10) if downsample applied to all blocks
             
         layers.append(nn.AdaptiveAvgPool2d((2, 5)))  # (B*S, last_chan_size=512, 2, 5)
-        # layers.append(nn.AdaptiveAvgPool2d((1, 1)))             # (B*S, last_chan_size=512, 1, 1)
+        layers.append(nn.AdaptiveAvgPool2d((1, 1)))             # (B*S, last_chan_size=512, 1, 1)
         self.cnn = nn.Sequential(*layers)
         
         # in content encoder remove layers.append(nn.AdaptiveAvgPool2d((1, 1))) to make final output shape 512*2*5 = 5120 with view in forward
         # so we will be projecting from 512*2*5 = 5120 to out_dim = 512 keeping granularity
         
         # projection to final cnn embedding dimension
-        flat_dim = prev_chan_size * 2 * 5
-        self.proj = nn.Linear(flat_dim, cnn_out_dim)
-        # self.proj = nn.Linear(prev_chan_size, cnn_out_dim)
+        # flat_dim = prev_chan_size * 2 * 5
+        # self.proj = nn.Linear(flat_dim, cnn_out_dim)
+        self.proj = nn.Linear(prev_chan_size, cnn_out_dim)
         
         # Linear projection (CNN out dim -> transformer dim) if needed
         self.input_proj = (

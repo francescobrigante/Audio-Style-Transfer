@@ -42,7 +42,7 @@ def infoNCE_loss(style_emb: torch.Tensor, labels: torch.Tensor, temperature: flo
 # Margin-based contrastive loss on class embeddings
 # It has been written in the general case of C classes so it can be also used for more than 2 classes
 # ---------------------------------------------
-def margin_loss(class_emb: torch.Tensor, margin: float = 1.0) -> torch.Tensor:
+def margin_loss(class_emb: torch.Tensor, margin: float = 2.0, weight: float = 1.0) -> torch.Tensor:
     # class_emb shape: (C, d)
     # pairwise distances matrix
     diff = class_emb.unsqueeze(1) - class_emb.unsqueeze(0)
@@ -135,7 +135,7 @@ def adversarial_loss(
 # - Cross-cov:          O(B d^2) TIME,          O(B d + d^2) MEMORY
 # - HSIC:               O(B^3 + B^2 d) TIME,    O(B^2 + B d) MEMORY
 # ---------------------------------------------
-def disentanglement_loss(style_emb: torch.Tensor, content_emb: torch.Tensor, use_hsic: bool = True) -> torch.Tensor:
+def disentanglement_loss(style_emb: torch.Tensor, content_emb: torch.Tensor, use_hsic: bool = True, weight=20.0) -> torch.Tensor:
     """
     Args:
         style_emb: Tensor of shape (B, d)
@@ -188,4 +188,5 @@ def disentanglement_loss(style_emb: torch.Tensor, content_emb: torch.Tensor, use
         KH = K @ H
         LH = L @ H
         hsic = torch.trace(KH @ LH) / ((B - 1) ** 2)
+
         return hsic

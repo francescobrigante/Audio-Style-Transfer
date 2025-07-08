@@ -205,7 +205,7 @@ def get_dataloader(piano_dir, violin_dir, batch_size=8, shuffle=True, stats_path
         batch_size = batch_size - 1
     
     dataset = DualInstrumentDataset(piano_dir, violin_dir, stats_path, use_separate_stats)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn, drop_last=True)
 
 def diagnose_window_counts(piano_dir, violin_dir, max_files=10):
     """

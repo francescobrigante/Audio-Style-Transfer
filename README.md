@@ -43,8 +43,7 @@ Audio-Style-Transfer/
 ├── Training & Loss Functions/
 │   ├── losses.py                                   # InfoNCE, margin, adversarial, HSIC losses
 │   ├── dataloader.py                               # Efficient dual-instrument data loading
-│   ├── train.ipynb                                 # Basic training notebook
-│   └── train2.ipynb                                # Advanced training with curriculum learning
+│   └── train2.ipynb                                # Training file with regular training and curriculum training
 │
 │
 ├── Evaluation/

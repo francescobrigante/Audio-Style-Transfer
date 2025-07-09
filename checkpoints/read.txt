@@ -1,1 +1,4 @@
 here you should put saved pth models
+
+SIMPLEDECODERcheckpoint_epoch_100 is the checkpoint utilizing SimpleDecoder Transformer Only (the main one)
+NEWDECODERcheckpoint_epoch_70.pth is the checkpoint utilizing new_decoder.py, CNN + Transformer decoder
